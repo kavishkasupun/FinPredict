@@ -26,17 +26,68 @@ class FirebaseService {
   Future<void> saveUserData(
       String userId, Map<String, dynamic> userData) async {
     try {
+      // Remove any existing 'lastLogin' from userData to avoid conflicts
+      final dataToSave = Map<String, dynamic>.from(userData);
+      dataToSave.remove('lastLogin'); // Remove if exists
+
       await _firestore.collection('users').doc(userId).set(
         {
-          ...userData,
-          'createdAt': FieldValue.serverTimestamp(),
+          ...dataToSave,
           'updatedAt': FieldValue.serverTimestamp(),
-          'lastLogin': FieldValue.serverTimestamp(), // Added lastLogin
+          'lastLogin': FieldValue.serverTimestamp(), // Add server timestamp
         },
         SetOptions(merge: true),
       );
+      print('✅ User data saved successfully for user: $userId');
     } catch (e) {
-      print('Error saving user data: $e');
+      print('❌ Error saving user data: $e');
+      rethrow;
+    }
+  }
+
+  // Check if email is verified
+  Future<bool> isEmailVerified(String userId) async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null && user.uid == userId) {
+        await user.reload(); // Reload to get latest status
+        return user.emailVerified;
+      }
+
+      // Fallback to Firestore data
+      final doc = await _firestore.collection('users').doc(userId).get();
+      final data = doc.data();
+      return data?['emailVerified'] ?? false;
+    } catch (e) {
+      print('Error checking email verification: $e');
+      return false;
+    }
+  }
+
+  // Resend verification email
+  Future<void> resendVerificationEmail() async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        await user.sendEmailVerification();
+      }
+    } catch (e) {
+      print('Error resending verification email: $e');
+      rethrow;
+    }
+  }
+
+  // Update email verification status
+  Future<void> updateEmailVerificationStatus(
+      String userId, bool isVerified) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'emailVerified': isVerified,
+        'accountStatus': isVerified ? 'active' : 'pending_verification',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('Error updating email verification status: $e');
       rethrow;
     }
   }

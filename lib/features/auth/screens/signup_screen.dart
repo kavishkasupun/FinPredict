@@ -53,12 +53,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
       final User? user = userCredential.user;
 
       if (user != null) {
-        // Save user data to Firestore
+        // Step 1: Update user profile with display name
+        await user.updateDisplayName(_nameController.text.trim());
+        await user.reload();
+
+        // Step 2: Send email verification
+        await user.sendEmailVerification();
+
+        // Step 3: Save user data to Firestore (with unverified status)
         final userData = {
           'uid': user.uid,
           'name': _nameController.text.trim(),
           'email': _emailController.text.trim(),
           'userType': _selectedUserType,
+          'emailVerified': false, // Initially false
+          'accountStatus': 'pending_verification',
           'createdAt': DateTime.now().toIso8601String(),
           'monthlyBudget': 0.0,
           'totalSavings': 0.0,
@@ -66,17 +75,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
         await _firebaseService.saveUserData(user.uid, userData);
 
-        CustomDialog.showSuccess(
-          context,
-          'Account created successfully!\n\nName: ${_nameController.text}\nEmail: ${_emailController.text}\nUser Type: $_selectedUserType',
-        );
-
-        // Navigate to login screen
-        await Future.delayed(const Duration(seconds: 2));
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
-        );
+        // Step 4: Show verification dialog
+        _showVerificationDialog();
       }
     } on FirebaseAuthException catch (e) {
       String message;
@@ -104,6 +104,335 @@ class _SignUpScreenState extends State<SignUpScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  void _showVerificationDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.verified_user, color: const Color(0xFFFBA002), size: 28),
+            const SizedBox(width: 12),
+            Text(
+              'Email Verification Required',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 22,
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Success Message with Icon
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFBA002).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFFFBA002).withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      color: const Color(0xFFFBA002),
+                      size: 28,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Account created successfully!',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Email Address Display
+              Text(
+                'Verification email sent to:',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFF334155),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.email_outlined,
+                      color: const Color(0xFFFBA002),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _emailController.text.trim(),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Instructions
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B).withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '📋 Next Steps:',
+                      style: TextStyle(
+                        color: const Color(0xFFFBA002),
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildInstructionStep(
+                      number: '1',
+                      text: 'Check your email inbox (and spam folder)',
+                      icon: Icons.inbox,
+                    ),
+                    _buildInstructionStep(
+                      number: '2',
+                      text: 'Open the verification email from FinPredict',
+                      icon: Icons.mail,
+                    ),
+                    _buildInstructionStep(
+                      number: '3',
+                      text: 'Click the verification link in the email',
+                      icon: Icons.link,
+                    ),
+                    _buildInstructionStep(
+                      number: '4',
+                      text: 'Return to the app and login',
+                      icon: Icons.login,
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Important Note
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.orange.withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.orange,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'You must verify your email before you can login to your account.',
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          // Resend Email Button
+          TextButton(
+            onPressed: () async {
+              try {
+                final user = FirebaseAuth.instance.currentUser;
+                if (user != null) {
+                  await user.sendEmailVerification();
+                  Navigator.pop(context); // Close current dialog
+                  // Use simple showSuccess without subtitle parameter
+                  CustomDialog.showSuccess(
+                    context,
+                    'Verification email resent!',
+                  );
+                  // Reopen the verification dialog
+                  _showVerificationDialog();
+                }
+              } catch (e) {
+                Navigator.pop(context); // Close current dialog
+                CustomDialog.showError(context, 'Failed to resend email: $e');
+                // Reopen the verification dialog
+                _showVerificationDialog();
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF334155),
+                borderRadius: BorderRadius.circular(25),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.refresh,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Resend Email',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Go to Login Button
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFBA002), Color(0xFFFFD166)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(25),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Go to Login',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.arrow_forward,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInstructionStep({
+    required String number,
+    required String text,
+    required IconData icon,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFBA002).withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(
+                number,
+                style: TextStyle(
+                  color: const Color(0xFFFBA002),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Icon(
+            icon,
+            color: Colors.white70,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -310,7 +639,37 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             return null;
                           },
                         ),
-                        const SizedBox(height: 30),
+
+                        const SizedBox(height: 10),
+                        // Email verification info
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.verified_user,
+                                color: const Color(0xFFFBA002),
+                                size: 20,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'A verification email will be sent to activate your account',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
                         CustomButton(
                           text: 'Create Account',
                           onPressed: _signUp,

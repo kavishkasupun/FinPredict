@@ -1,67 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 
 class CustomDialog {
   static void showSuccess(BuildContext context, String message) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: GlassmorphicContainer(
-          width: 300,
-          height: 200,
-          borderRadius: 20,
-          blur: 20,
-          alignment: Alignment.center,
-          border: 1,
-          linearGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF10B981).withOpacity(0.3),
-              const Color(0xFF10B981).withOpacity(0.1),
-            ],
-          ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF10B981).withOpacity(0.5),
-              const Color(0xFF10B981).withOpacity(0.2),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.check_circle,
-                color: Color(0xFF10B981),
-                size: 64,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Success!',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFF94A3B8),
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      barrierDismissible: false,
+      builder: (context) => _buildDialog(
+        context,
+        Icons.check_circle,
+        'Success!',
+        message,
+        const Color(0xFF10B981),
       ),
     );
   }
@@ -69,59 +18,13 @@ class CustomDialog {
   static void showError(BuildContext context, String message) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: GlassmorphicContainer(
-          width: 300,
-          height: 200,
-          borderRadius: 20,
-          blur: 20,
-          alignment: Alignment.center,
-          border: 1,
-          linearGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFFEF4444).withOpacity(0.3),
-              const Color(0xFFEF4444).withOpacity(0.1),
-            ],
-          ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFFEF4444).withOpacity(0.5),
-              const Color(0xFFEF4444).withOpacity(0.2),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error, color: Color(0xFFEF4444), size: 64),
-              const SizedBox(height: 16),
-              const Text(
-                'Error',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFF94A3B8),
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      barrierDismissible: true,
+      builder: (context) => _buildDialog(
+        context,
+        Icons.error,
+        'Error',
+        message,
+        const Color(0xFFEF4444),
       ),
     );
   }
@@ -129,262 +32,207 @@ class CustomDialog {
   static void showWarning(BuildContext context, String message) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: GlassmorphicContainer(
-          width: 300,
-          height: 200,
-          borderRadius: 20,
-          blur: 20,
-          alignment: Alignment.center,
-          border: 1,
-          linearGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFFF59E0B).withOpacity(0.3),
-              const Color(0xFFF59E0B).withOpacity(0.1),
-            ],
-          ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFFF59E0B).withOpacity(0.5),
-              const Color(0xFFF59E0B).withOpacity(0.2),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.warning, color: Color(0xFFF59E0B), size: 64),
-              const SizedBox(height: 16),
-              const Text(
-                'Warning',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFF94A3B8),
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      barrierDismissible: true,
+      builder: (context) => _buildDialog(
+        context,
+        Icons.warning,
+        'Warning',
+        message,
+        const Color(0xFFF59E0B),
       ),
     );
   }
 
-  // Add this new method
   static void showInfo(BuildContext context, String message) {
     showDialog(
       context: context,
+      barrierDismissible: true,
+      builder: (context) => _buildDialog(
+        context,
+        Icons.info,
+        'Information',
+        message,
+        const Color(0xFF3B82F6),
+      ),
+    );
+  }
+
+  static Future<bool?> showConfirmation(
+    BuildContext context,
+    String title,
+    String message,
+  ) async {
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
-        child: GlassmorphicContainer(
-          width: 300,
-          height: 200,
-          borderRadius: 20,
-          blur: 20,
-          alignment: Alignment.center,
-          border: 1,
-          linearGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF3B82F6).withOpacity(0.3),
-              const Color(0xFF3B82F6).withOpacity(0.1),
-            ],
-          ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF3B82F6).withOpacity(0.5),
-              const Color(0xFF3B82F6).withOpacity(0.2),
+        insetPadding: const EdgeInsets.all(20),
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(maxWidth: 400),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFF334155),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
             ],
           ),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.info,
-                color: Color(0xFF3B82F6),
-                size: 64,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Information',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFF94A3B8),
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Optional: Add a confirmation dialog
-  static Future<bool?> showConfirmation(
-      BuildContext context, String title, String message) async {
-    return await showDialog<bool>(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: GlassmorphicContainer(
-          width: 300,
-          height: 220,
-          borderRadius: 20,
-          blur: 20,
-          alignment: Alignment.center,
-          border: 1,
-          linearGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFFFBA002).withOpacity(0.3),
-              const Color(0xFF313B2F).withOpacity(0.1),
-            ],
-          ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFFFBA002).withOpacity(0.5),
-              const Color(0xFF313B2F).withOpacity(0.2),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.help,
-                  color: Color(0xFFFBA002),
-                  size: 48,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFF94A3B8),
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                padding: const EdgeInsets.all(20),
+                child: Column(
                   children: [
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFEF4444),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(color: Colors.white),
-                      ),
+                    Icon(
+                      Icons.help_outline,
+                      color: const Color(0xFFFBA002),
+                      size: 50,
                     ),
-                    const SizedBox(width: 16),
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
+                    const SizedBox(height: 16),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
                       ),
-                      child: const Text(
-                        'Confirm',
-                        style: TextStyle(color: Colors.white),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      message,
+                      style: const TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 16,
                       ),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              const Divider(
+                color: Color(0xFF334155),
+                height: 1,
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => Navigator.pop(context, false),
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(20),
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              right: BorderSide(
+                                color: const Color(0xFF334155),
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => Navigator.pop(context, true),
+                        borderRadius: const BorderRadius.only(
+                          bottomRight: Radius.circular(20),
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFFFBA002),
+                                const Color(0xFFFFD166),
+                              ],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            ),
+                          ),
+                          child: const Text(
+                            'Confirm',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // Optional: Add a loading dialog
   static void showLoading(BuildContext context, String message) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
-        child: GlassmorphicContainer(
-          width: 250,
-          height: 150,
-          borderRadius: 20,
-          blur: 20,
-          alignment: Alignment.center,
-          border: 1,
-          linearGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF1E293B).withOpacity(0.8),
-              const Color(0xFF0F172A).withOpacity(0.8),
-            ],
-          ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF334155).withOpacity(0.5),
-              const Color(0xFF334155).withOpacity(0.2),
+        child: Container(
+          width: 200,
+          height: 200,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFF334155),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
             ],
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(
-                color: Color(0xFFFBA002),
+              const SizedBox(
+                width: 50,
+                height: 50,
+                child: CircularProgressIndicator(
+                  color: Color(0xFFFBA002),
+                  strokeWidth: 3,
+                ),
               ),
               const SizedBox(height: 20),
               Text(
@@ -393,6 +241,7 @@ class CustomDialog {
                   color: Colors.white,
                   fontSize: 16,
                 ),
+                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -401,8 +250,122 @@ class CustomDialog {
     );
   }
 
-  // Optional: Dismiss dialog
   static void dismiss(BuildContext context) {
     Navigator.of(context, rootNavigator: true).pop();
+  }
+
+  // Helper method to build common dialog
+  static Widget _buildDialog(
+    BuildContext context,
+    IconData icon,
+    String title,
+    String message,
+    Color color,
+  ) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(20),
+      child: Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(maxWidth: 400),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFF334155),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: color.withOpacity(0.1),
+                      border: Border.all(
+                        color: color.withOpacity(0.3),
+                        width: 2,
+                      ),
+                    ),
+                    child: Icon(
+                      icon,
+                      color: color,
+                      size: 40,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    message,
+                    style: const TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 16,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+            const Divider(
+              color: Color(0xFF334155),
+              height: 1,
+            ),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => Navigator.pop(context),
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(20),
+                  bottomRight: Radius.circular(20),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(20),
+                      bottomRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Text(
+                    'OK',
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

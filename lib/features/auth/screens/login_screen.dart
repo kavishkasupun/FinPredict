@@ -7,6 +7,7 @@ import 'package:finpredict/widgets/custom_dialog.dart';
 import 'package:finpredict/services/firebase_service.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // ADD THIS IMPORT
 import 'package:finpredict/features/dashboard/screens/home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -71,17 +72,28 @@ class _LoginScreenState extends State<LoginScreen> {
             'email': user.email,
             'photoUrl': user.photoURL,
             'userType': 'Google User',
+            'emailVerified': true, // Google users are auto-verified
+            'accountStatus': 'active',
             'createdAt': DateTime.now().toIso8601String(),
             'monthlyBudget': 60000.0,
             'totalSavings': 0.0,
             'isGoogleUser': true,
+            'lastLogin': DateTime.now().toIso8601String(), // Add last login
           };
 
           await _firebaseService.saveUserData(user.uid, userData);
           print('Google user created in Firestore successfully');
         } else {
           print('Google user already exists in Firestore');
+          // Update last login
+          await _firebaseService.saveUserData(user.uid, {
+            'updatedAt': FieldValue.serverTimestamp(),
+            'lastLogin': FieldValue.serverTimestamp(), // Update last login
+          });
         }
+
+        // Update last login separately as well
+        await _firebaseService.updateLastLogin(user.uid);
 
         CustomDialog.showSuccess(
           context,
@@ -90,6 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         await Future.delayed(const Duration(milliseconds: 1500));
 
+        // Navigate to home screen and remove all previous routes
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const HomeScreen()),
           (route) => false,
@@ -146,10 +159,32 @@ class _LoginScreenState extends State<LoginScreen> {
       final User? user = userCredential.user;
 
       if (user != null) {
+        // Step 1: Check if email is verified
+        await user.reload(); // Reload to get latest verification status
+        final currentUser = FirebaseAuth.instance.currentUser;
+
+        if (!(currentUser?.emailVerified ?? false)) {
+          // Email not verified
+          try {
+            await user.sendEmailVerification();
+            print('📧 Verification email resent to ${user.email}');
+          } catch (e) {
+            print('⚠️ Could not resend verification email: $e');
+          }
+
+          // Show verification required dialog
+          _showVerificationRequiredDialog(user.email ?? 'your email');
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
+
         print('Email User UID: ${user.uid}');
         print('Email User Email: ${user.email}');
+        print('Email verified: ${user.emailVerified}');
 
-        // Check if user exists in Firestore
+        // Step 2: Check if user exists in Firestore
         final userExists = await _firebaseService.checkUserExists(user.uid);
 
         if (!userExists) {
@@ -160,17 +195,30 @@ class _LoginScreenState extends State<LoginScreen> {
             'name': user.email?.split('@').first ?? 'New User',
             'email': user.email,
             'userType': 'Regular User',
+            'emailVerified': true,
+            'accountStatus': 'active',
             'createdAt': DateTime.now().toIso8601String(),
             'monthlyBudget': 60000.0,
             'totalSavings': 0.0,
             'isGoogleUser': false,
+            'lastLogin': DateTime.now().toIso8601String(), // Add last login
           };
 
           await _firebaseService.saveUserData(user.uid, userData);
           print('Email user created in Firestore successfully');
         } else {
           print('Email user already exists in Firestore');
+          // Update email verification status and last login
+          await _firebaseService.saveUserData(user.uid, {
+            'emailVerified': true,
+            'accountStatus': 'active',
+            'updatedAt': FieldValue.serverTimestamp(),
+            'lastLogin': FieldValue.serverTimestamp(), // Update last login
+          });
         }
+
+        // Update last login separately as well
+        await _firebaseService.updateLastLogin(user.uid);
 
         CustomDialog.showSuccess(
           context,
@@ -179,6 +227,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         await Future.delayed(const Duration(milliseconds: 1500));
 
+        // Navigate to home screen and remove all previous routes
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const HomeScreen()),
           (route) => false,
@@ -213,6 +262,121 @@ class _LoginScreenState extends State<LoginScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  void _showVerificationRequiredDialog(String email) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.verified_user, color: Color(0xFFFBA002), size: 28),
+            const SizedBox(width: 12),
+            const Text(
+              'Email Verification Required',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 22,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Please verify your email address before logging in.',
+              style: TextStyle(color: Colors.white70, fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'We have sent a verification email to:',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.email, color: Color(0xFFFBA002), size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      email,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline,
+                      color: Colors.orange, size: 16),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Check your email and click the verification link.',
+                      style: TextStyle(color: Colors.orange, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              // Close the dialog and stay on login screen
+              Navigator.pop(context);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFBA002), Color(0xFFFFD166)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(25),
+              ),
+              child: const Text(
+                'OK',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _sendPasswordReset() async {

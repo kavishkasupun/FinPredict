@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   
+  
   # Firebase
   firebase_core: ^2.32.0
   firebase_auth: ^4.20.0
@@ -45,5 +46,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
-    - assets/animations/
+    - assets/animations/finance1.json
     - assets/models/

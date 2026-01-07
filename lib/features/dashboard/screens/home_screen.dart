@@ -267,485 +267,508 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
-      body: RefreshIndicator(
-        color: const Color(0xFFFBA002),
-        backgroundColor: const Color(0xFF0F172A),
-        onRefresh: _refreshData,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 40),
-                // Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Welcome Back,',
-                          style: TextStyle(
-                            color: const Color(0xFF94A3B8),
-                            fontSize: 14,
-                          ),
-                        ),
-                        Text(
-                          userName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const ProfileScreen(),
-                              ),
-                            );
-                          },
-                          icon: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  const Color(0xFF3B82F6).withOpacity(0.2),
-                                  const Color(0xFF313B2F).withOpacity(0.2),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.person,
-                              color: Color(0xFF3B82F6),
-                              size: 28,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: _detectMood,
-                          icon: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  const Color(0xFFFBA002).withOpacity(0.2),
-                                  const Color(0xFF313B2F).withOpacity(0.2),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              _getMoodIcon(),
-                              color: const Color(0xFFFBA002),
-                              size: 28,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return RefreshIndicator(
+            color: const Color(0xFFFBA002),
+            backgroundColor: const Color(0xFF0F172A),
+            onRefresh: _refreshData,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight,
                 ),
-                const SizedBox(height: 30),
-                // Financial Overview Glass Card
-                GlassCard(
-                  width: double.infinity,
-                  borderRadius: 25,
-                  blur: 20,
-                  child: Column(
-                    children: [
-                      const Text(
-                        'Financial Overview',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _buildStatCard(
-                            'Monthly Budget',
-                            'Rs. ${_budgetLimit.toStringAsFixed(2)}',
-                            Icons.account_balance_wallet,
-                            const Color(0xFF10B981),
-                          ),
-                          _buildStatCard(
-                            'Current Expenses',
-                            'Rs. ${_currentExpense.toStringAsFixed(2)}',
-                            Icons.money_off,
-                            const Color(0xFFEF4444),
-                          ),
-                          _buildStatCard(
-                            'Savings',
-                            'Rs. ${savings.toStringAsFixed(2)}',
-                            Icons.savings,
-                            const Color(0xFF3B82F6),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Savings Rate: ${savingsRate.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          color: savingsRate >= 20
-                              ? const Color(0xFF10B981)
-                              : savingsRate >= 10
-                                  ? const Color(0xFFFBA002)
-                                  : const Color(0xFFEF4444),
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 30),
-                      // Expense Gauge
-                      SizedBox(
-                        height: 200,
-                        child: SfRadialGauge(
-                          axes: <RadialAxis>[
-                            RadialAxis(
-                              minimum: 0,
-                              maximum: 100,
-                              showLabels: false,
-                              showTicks: false,
-                              axisLineStyle: const AxisLineStyle(
-                                thickness: 0.1,
-                                cornerStyle: CornerStyle.bothCurve,
-                                color: Color(0xFF334155),
-                              ),
-                              pointers: <GaugePointer>[
-                                RangePointer(
-                                  value: expensePercentageDouble,
-                                  width: 0.2,
-                                  cornerStyle: CornerStyle.bothCurve,
-                                  gradient: const SweepGradient(
-                                    colors: <Color>[
-                                      Color(0xFF10B981),
-                                      Color(0xFFFBA002),
-                                      Color(0xFFEF4444),
-                                    ],
-                                  ),
-                                ),
-                                MarkerPointer(
-                                  value: expensePercentageDouble,
-                                  markerType: MarkerType.circle,
-                                  color: Colors.white,
-                                  borderWidth: 3,
-                                  borderColor: const Color(0xFFFBA002),
-                                  markerHeight: 15,
-                                  markerWidth: 15,
-                                ),
-                              ],
-                              annotations: <GaugeAnnotation>[
-                                GaugeAnnotation(
-                                  positionFactor: 0.1,
-                                  widget: Text(
-                                    '${expensePercentage.round()}%',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                GaugeAnnotation(
-                                  positionFactor: 0.3,
-                                  widget: Text(
-                                    'Budget Used',
-                                    style: TextStyle(
-                                      color: const Color(0xFF94A3B8),
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: constraints.maxWidth > 600 ? 24.0 : 16.0,
+                    vertical: 16.0,
                   ),
-                ),
-                const SizedBox(height: 20),
-                // AI Recommendations
-                GlassCard(
-                  width: double.infinity,
-                  borderRadius: 25,
-                  blur: 20,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'AI Recommendations',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Based on your spending patterns',
-                        style: TextStyle(
-                          color: const Color(0xFF94A3B8),
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      ..._recommendations.map((recommendation) => Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Row(
+                      const SizedBox(height: 40),
+                      // Header
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(
-                                  Icons.lightbulb,
-                                  color: const Color(0xFFFBA002),
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    recommendation,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                    ),
+                                Text(
+                                  'Welcome Back,',
+                                  style: TextStyle(
+                                    color: const Color(0xFF94A3B8),
+                                    fontSize: 14,
                                   ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  userName,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
                                 ),
                               ],
                             ),
-                          )),
-                      const SizedBox(height: 20),
-                      CustomButton(
-                        text: 'View More Recommendations',
-                        onPressed: () {},
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const ProfileScreen(),
+                                    ),
+                                  );
+                                },
+                                icon: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        const Color(0xFF3B82F6)
+                                            .withOpacity(0.2),
+                                        const Color(0xFF313B2F)
+                                            .withOpacity(0.2),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.person,
+                                    color: Color(0xFF3B82F6),
+                                    size: 28,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                onPressed: _detectMood,
+                                icon: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        const Color(0xFFFBA002)
+                                            .withOpacity(0.2),
+                                        const Color(0xFF313B2F)
+                                            .withOpacity(0.2),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    _getMoodIcon(),
+                                    color: const Color(0xFFFBA002),
+                                    size: 28,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 30),
+                      // Financial Overview Glass Card
+                      GlassCard(
                         width: double.infinity,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Quick Actions
-                Row(
-                  children: [
-                    Expanded(
-                      child: GlassCard(
-                        height: 120,
-                        borderRadius: 20,
-                        blur: 15,
-                        child: InkWell(
-                          onTap: () {
-                            // Navigate to add expense screen
-                          },
-                          borderRadius: BorderRadius.circular(20),
+                        borderRadius: 25,
+                        blur: 20,
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
                           child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.add_chart,
-                                color: const Color(0xFFFBA002),
-                                size: 32,
-                              ),
-                              const SizedBox(height: 10),
                               const Text(
-                                'Add Expense',
+                                'Financial Overview',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 14,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final isWide = constraints.maxWidth > 400;
+                                  return isWide
+                                      ? Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceAround,
+                                          children: [
+                                            _buildStatCard(
+                                              'Monthly Budget',
+                                              'Rs. ${_budgetLimit.toStringAsFixed(2)}',
+                                              Icons.account_balance_wallet,
+                                              const Color(0xFF10B981),
+                                            ),
+                                            _buildStatCard(
+                                              'Current Expenses',
+                                              'Rs. ${_currentExpense.toStringAsFixed(2)}',
+                                              Icons.money_off,
+                                              const Color(0xFFEF4444),
+                                            ),
+                                            _buildStatCard(
+                                              'Savings',
+                                              'Rs. ${savings.toStringAsFixed(2)}',
+                                              Icons.savings,
+                                              const Color(0xFF3B82F6),
+                                            ),
+                                          ],
+                                        )
+                                      : Column(
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.spaceAround,
+                                              children: [
+                                                _buildStatCard(
+                                                  'Monthly Budget',
+                                                  'Rs. ${_budgetLimit.toStringAsFixed(2)}',
+                                                  Icons.account_balance_wallet,
+                                                  const Color(0xFF10B981),
+                                                ),
+                                                _buildStatCard(
+                                                  'Current Expenses',
+                                                  'Rs. ${_currentExpense.toStringAsFixed(2)}',
+                                                  Icons.money_off,
+                                                  const Color(0xFFEF4444),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 16),
+                                            _buildStatCard(
+                                              'Savings',
+                                              'Rs. ${savings.toStringAsFixed(2)}',
+                                              Icons.savings,
+                                              const Color(0xFF3B82F6),
+                                            ),
+                                          ],
+                                        );
+                                },
+                              ),
+                              const SizedBox(height: 20),
+                              Text(
+                                'Savings Rate: ${savingsRate.toStringAsFixed(1)}%',
+                                style: TextStyle(
+                                  color: savingsRate >= 20
+                                      ? const Color(0xFF10B981)
+                                      : savingsRate >= 10
+                                          ? const Color(0xFFFBA002)
+                                          : const Color(0xFFEF4444),
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 30),
+                              // Expense Gauge
+                              SizedBox(
+                                height: 200,
+                                child: SfRadialGauge(
+                                  axes: <RadialAxis>[
+                                    RadialAxis(
+                                      minimum: 0,
+                                      maximum: 100,
+                                      showLabels: false,
+                                      showTicks: false,
+                                      axisLineStyle: const AxisLineStyle(
+                                        thickness: 0.1,
+                                        cornerStyle: CornerStyle.bothCurve,
+                                        color: Color(0xFF334155),
+                                      ),
+                                      pointers: <GaugePointer>[
+                                        RangePointer(
+                                          value: expensePercentageDouble,
+                                          width: 0.2,
+                                          cornerStyle: CornerStyle.bothCurve,
+                                          gradient: const SweepGradient(
+                                            colors: <Color>[
+                                              Color(0xFF10B981),
+                                              Color(0xFFFBA002),
+                                              Color(0xFFEF4444),
+                                            ],
+                                          ),
+                                        ),
+                                        MarkerPointer(
+                                          value: expensePercentageDouble,
+                                          markerType: MarkerType.circle,
+                                          color: Colors.white,
+                                          borderWidth: 3,
+                                          borderColor: const Color(0xFFFBA002),
+                                          markerHeight: 15,
+                                          markerWidth: 15,
+                                        ),
+                                      ],
+                                      annotations: <GaugeAnnotation>[
+                                        GaugeAnnotation(
+                                          positionFactor: 0.1,
+                                          widget: Text(
+                                            '${expensePercentage.round()}%',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 32,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        GaugeAnnotation(
+                                          positionFactor: 0.3,
+                                          widget: Text(
+                                            'Budget Used',
+                                            style: TextStyle(
+                                              color: const Color(0xFF94A3B8),
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: GlassCard(
-                        height: 120,
-                        borderRadius: 20,
-                        blur: 15,
-                        child: InkWell(
-                          onTap: () {
-                            // Navigate to tasks screen
-                          },
-                          borderRadius: BorderRadius.circular(20),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.task,
-                                color: const Color(0xFFFBA002),
-                                size: 32,
-                              ),
-                              const SizedBox(height: 10),
-                              const Text(
-                                'Tasks',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: GlassCard(
-                        height: 120,
-                        borderRadius: 20,
-                        blur: 15,
-                        child: InkWell(
-                          onTap: () {
-                            // Navigate to AI chat screen
-                          },
-                          borderRadius: BorderRadius.circular(20),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.chat,
-                                color: const Color(0xFFFBA002),
-                                size: 32,
-                              ),
-                              const SizedBox(height: 10),
-                              const Text(
-                                'AI Chat',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (_showExpenseWarning) ...[
-                  const SizedBox(height: 20),
-                  GlassCard(
-                    width: double.infinity,
-                    borderRadius: 25,
-                    blur: 20,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.warning,
-                          color: const Color(0xFFF59E0B),
-                          size: 32,
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
+                      const SizedBox(height: 20),
+                      // AI Recommendations
+                      GlassCard(
+                        width: double.infinity,
+                        borderRadius: 25,
+                        blur: 20,
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Expense Alert!',
+                                'AI Recommendations',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 18,
+                                  fontSize: 20,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
+                              const SizedBox(height: 8),
                               Text(
-                                'You\'ve used ${expensePercentage.round()}% of your monthly budget',
+                                'Based on your spending patterns',
                                 style: TextStyle(
                                   color: const Color(0xFF94A3B8),
                                   fontSize: 14,
                                 ),
                               ),
+                              const SizedBox(height: 20),
+                              ..._recommendations
+                                  .map((recommendation) => Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 12),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.only(top: 2),
+                                              child: Icon(
+                                                Icons.lightbulb,
+                                                color: const Color(0xFFFBA002),
+                                                size: 20,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Text(
+                                                recommendation,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 16,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      )),
+                              const SizedBox(height: 20),
+                              CustomButton(
+                                text: 'View More Recommendations',
+                                onPressed: () {},
+                                width: double.infinity,
+                              ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 30),
-                // Additional Info
-                GlassCard(
-                  width: double.infinity,
-                  borderRadius: 25,
-                  blur: 20,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Monthly Summary',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                      ),
+                      const SizedBox(height: 20),
+                      // Quick Actions
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isWide = constraints.maxWidth > 500;
+                          return isWide
+                              ? Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildQuickAction(
+                                        Icons.add_chart,
+                                        'Add Expense',
+                                        onTap: () {
+                                          // Navigate to add expense screen
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _buildQuickAction(
+                                        Icons.task,
+                                        'Tasks',
+                                        onTap: () {
+                                          // Navigate to tasks screen
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _buildQuickAction(
+                                        Icons.chat,
+                                        'AI Chat',
+                                        onTap: () {
+                                          // Navigate to AI chat screen
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildQuickAction(
+                                            Icons.add_chart,
+                                            'Add Expense',
+                                            onTap: () {
+                                              // Navigate to add expense screen
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: _buildQuickAction(
+                                            Icons.task,
+                                            'Tasks',
+                                            onTap: () {
+                                              // Navigate to tasks screen
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _buildQuickAction(
+                                      Icons.chat,
+                                      'AI Chat',
+                                      onTap: () {
+                                        // Navigate to AI chat screen
+                                      },
+                                    ),
+                                  ],
+                                );
+                        },
+                      ),
+                      if (_showExpenseWarning) ...[
+                        const SizedBox(height: 20),
+                        GlassCard(
+                          width: double.infinity,
+                          borderRadius: 25,
+                          blur: 20,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.warning,
+                                  color: const Color(0xFFF59E0B),
+                                  size: 32,
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Expense Alert!',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'You\'ve used ${expensePercentage.round()}% of your monthly budget',
+                                        style: TextStyle(
+                                          color: const Color(0xFF94A3B8),
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 15),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Days Left in Month:',
-                              style: TextStyle(
-                                color: const Color(0xFF94A3B8),
-                                fontSize: 16,
-                              ),
-                            ),
-                            Text(
-                              '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Daily Budget Available:',
-                              style: TextStyle(
-                                color: const Color(0xFF94A3B8),
-                                fontSize: 16,
-                              ),
-                            ),
-                            Text(
-                              'Rs. ${((_budgetLimit - _currentExpense) / (DateTime.now().day)).toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                color: Color(0xFF10B981),
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
                       ],
-                    ),
+                      const SizedBox(height: 30),
+                      // Additional Info
+                      GlassCard(
+                        width: double.infinity,
+                        borderRadius: 25,
+                        blur: 20,
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Monthly Summary',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 15),
+                              _buildSummaryItem(
+                                'Days Left in Month:',
+                                '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
+                              ),
+                              const SizedBox(height: 12),
+                              _buildSummaryItem(
+                                'Daily Budget Available:',
+                                'Rs. ${((_budgetLimit - _currentExpense) / DateTime.now().day).toStringAsFixed(2)}',
+                                isPositive: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 20),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -753,6 +776,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildStatCard(
       String title, String value, IconData icon, Color color) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           padding: const EdgeInsets.all(12),
@@ -769,6 +793,7 @@ class _HomeScreenState extends State<HomeScreen> {
             color: const Color(0xFF94A3B8),
             fontSize: 12,
           ),
+          textAlign: TextAlign.center,
         ),
         const SizedBox(height: 4),
         Text(
@@ -777,6 +802,72 @@ class _HomeScreenState extends State<HomeScreen> {
             color: Colors.white,
             fontSize: 16,
             fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuickAction(IconData icon, String title, {VoidCallback? onTap}) {
+    return GlassCard(
+      height: 120,
+      borderRadius: 20,
+      blur: 15,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: const Color(0xFFFBA002),
+              size: 32,
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryItem(String label, String value,
+      {bool isPositive = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: const Color(0xFF94A3B8),
+              fontSize: 16,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              value,
+              style: TextStyle(
+                color: isPositive ? const Color(0xFF10B981) : Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ),
       ],
