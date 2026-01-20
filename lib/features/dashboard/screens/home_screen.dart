@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:finpredict/widgets/glass_card.dart';
@@ -8,6 +9,11 @@ import 'package:finpredict/services/firebase_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:finpredict/features/profile/screens/profile_screen.dart';
 import 'package:finpredict/features/expenses/services/expense_service.dart';
+import 'package:finpredict/features/tasks/screens/task_screen.dart' as tasks;
+import 'package:finpredict/features/loans/screens/loan_screen.dart' as loans;
+import 'package:finpredict/features/chat/screens/chat_screen.dart';
+import 'package:finpredict/features/expenses/screens/add_expense_screen.dart';
+import 'package:finpredict/features/expenses/screens/expense_list_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -32,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    _checkPendingNotifications();
   }
 
   Future<void> _loadUserData() async {
@@ -227,6 +234,89 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refreshData() async {
     await _loadUserData();
+  }
+
+  void _checkPendingNotifications() {
+    // Check for any pending task notifications
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (_currentUser != null) {
+        try {
+          // Check for overdue tasks
+          final tasksSnapshot = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(_currentUser!.uid)
+              .collection('tasks')
+              .where('status', isEqualTo: 'pending')
+              .get();
+
+          final now = DateTime.now();
+          for (final taskDoc in tasksSnapshot.docs) {
+            final task = taskDoc.data();
+            if (task.containsKey('dueDate')) {
+              final dueDate = DateTime.parse(task['dueDate']);
+              final difference = dueDate.difference(now);
+
+              if (difference.inHours <= 24 && difference.inHours >= 0) {
+                CustomDialog.showWarning(
+                  context,
+                  'Task Reminder: "${task['title']}" is due in ${difference.inHours} hours!',
+                );
+              }
+            }
+          }
+        } catch (e) {
+          print('Error checking notifications: $e');
+        }
+      }
+    });
+  }
+
+  // Navigation methods
+  void _navigateToAddExpense() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AddExpenseScreen(),
+      ),
+    );
+  }
+
+  void _navigateToExpenseList() {
+    if (_currentUser != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ExpenseListScreen(userId: _currentUser!.uid),
+        ),
+      );
+    }
+  }
+
+  void _navigateToTasks() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const tasks.TaskScreen(),
+      ),
+    );
+  }
+
+  void _navigateToLoans() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const loans.LoanScreen(),
+      ),
+    );
+  }
+
+  void _navigateToChat() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ChatScreen(),
+      ),
+    );
   }
 
   @override
@@ -534,6 +624,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ],
                                 ),
                               ),
+                              const SizedBox(height: 20),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: CustomButton(
+                                      text: 'View All Expenses',
+                                      onPressed: _navigateToExpenseList,
+                                      backgroundColor: const Color(0xFF3B82F6),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),
@@ -598,8 +700,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                       )),
                               const SizedBox(height: 20),
                               CustomButton(
-                                text: 'View More Recommendations',
-                                onPressed: () {},
+                                text: 'Ask AI Assistant',
+                                onPressed: _navigateToChat,
                                 width: double.infinity,
                               ),
                             ],
@@ -618,9 +720,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       child: _buildQuickAction(
                                         Icons.add_chart,
                                         'Add Expense',
-                                        onTap: () {
-                                          // Navigate to add expense screen
-                                        },
+                                        onTap: _navigateToAddExpense,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
@@ -628,19 +728,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                       child: _buildQuickAction(
                                         Icons.task,
                                         'Tasks',
-                                        onTap: () {
-                                          // Navigate to tasks screen
-                                        },
+                                        onTap: _navigateToTasks,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: _buildQuickAction(
-                                        Icons.chat,
-                                        'AI Chat',
-                                        onTap: () {
-                                          // Navigate to AI chat screen
-                                        },
+                                        Icons.money,
+                                        'Loans',
+                                        onTap: _navigateToLoans,
                                       ),
                                     ),
                                   ],
@@ -653,9 +749,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           child: _buildQuickAction(
                                             Icons.add_chart,
                                             'Add Expense',
-                                            onTap: () {
-                                              // Navigate to add expense screen
-                                            },
+                                            onTap: _navigateToAddExpense,
                                           ),
                                         ),
                                         const SizedBox(width: 12),
@@ -663,20 +757,30 @@ class _HomeScreenState extends State<HomeScreen> {
                                           child: _buildQuickAction(
                                             Icons.task,
                                             'Tasks',
-                                            onTap: () {
-                                              // Navigate to tasks screen
-                                            },
+                                            onTap: _navigateToTasks,
                                           ),
                                         ),
                                       ],
                                     ),
                                     const SizedBox(height: 12),
-                                    _buildQuickAction(
-                                      Icons.chat,
-                                      'AI Chat',
-                                      onTap: () {
-                                        // Navigate to AI chat screen
-                                      },
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildQuickAction(
+                                            Icons.money,
+                                            'Loans',
+                                            onTap: _navigateToLoans,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: _buildQuickAction(
+                                            Icons.chat,
+                                            'AI Chat',
+                                            onTap: _navigateToChat,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 );
@@ -756,6 +860,23 @@ class _HomeScreenState extends State<HomeScreen> {
                                 'Daily Budget Available:',
                                 'Rs. ${((_budgetLimit - _currentExpense) / DateTime.now().day).toStringAsFixed(2)}',
                                 isPositive: true,
+                              ),
+                              const SizedBox(height: 20),
+                              CustomButton(
+                                text: 'View Detailed Report',
+                                onPressed: () {
+                                  CustomDialog.showInfo(
+                                    context,
+                                    'Monthly Report:\n'
+                                    '• Budget: Rs. ${_budgetLimit.toStringAsFixed(2)}\n'
+                                    '• Spent: Rs. ${_currentExpense.toStringAsFixed(2)}\n'
+                                    '• Savings: Rs. ${savings.toStringAsFixed(2)}\n'
+                                    '• Savings Rate: ${savingsRate.toStringAsFixed(1)}%\n'
+                                    '• Days Remaining: ${DateTime(DateTime.now().year, DateTime.now().month + 1, 0).day - DateTime.now().day}',
+                                  );
+                                },
+                                width: double.infinity,
+                                backgroundColor: const Color(0xFF8B5CF6),
                               ),
                             ],
                           ),

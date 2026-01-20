@@ -666,7 +666,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _isEditing = true;
             });
           },
-          width: 150,
+          width: 170,
         ),
       );
     } else {
@@ -675,7 +675,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           text: 'Save',
           onPressed: _updateProfile,
           isLoading: _isLoading,
-          width: 100,
+          width: 130,
         ),
         const SizedBox(width: 10, height: 10),
         CustomButton(
@@ -687,7 +687,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             });
           },
           backgroundColor: const Color(0xFFEF4444),
-          width: 100,
+          width: 130,
         ),
       ]);
     }

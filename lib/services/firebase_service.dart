@@ -253,4 +253,33 @@ class FirebaseService {
       return 0.0;
     }
   }
+
+  Future<void> addLoan(String userId, Map<String, dynamic> loanData) async {
+    await _firestore.collection('users').doc(userId).collection('loans').add({
+      ...loanData,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Stream<QuerySnapshot> getLoansStream(String userId) {
+    return _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('loans')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  Future<void> updateLoan(
+      String userId, String loanId, Map<String, dynamic> updates) async {
+    await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('loans')
+        .doc(loanId)
+        .update({
+      ...updates,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
 }
