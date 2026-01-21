@@ -3,7 +3,6 @@ import 'package:finpredict/features/auth/screens/login_screen.dart';
 import 'package:finpredict/features/auth/screens/splash_screen.dart';
 import 'package:finpredict/features/dashboard/screens/home_screen.dart';
 import 'package:finpredict/services/firebase_service.dart';
-import 'package:finpredict/services/notification_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -13,7 +12,6 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   await FirebaseService().init();
-  await NotificationService().init();
 
   runApp(
     MultiProvider(

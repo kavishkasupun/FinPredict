@@ -1,69 +1,71 @@
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest.dart' as tz;
+import 'package:flutter/material.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  late FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin;
-
-  Future<void> init() async {
-    tz.initializeTimeZones();
-
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const InitializationSettings initializationSettings =
-        InitializationSettings(android: initializationSettingsAndroid);
-
-    _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-    await _flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  // Simple notification service without flutter_local_notifications
+  Future<void> showTaskNotification(
+      BuildContext context, String title, String body) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: Text(
+          title,
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          body,
+          style: const TextStyle(color: Color(0xFF94A3B8)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'OK',
+              style: TextStyle(color: Color(0xFFFBA002)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
+  // Show snackbar notification
+  void showSnackBarNotification(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFFF59E0B),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // Initialize - empty for now
+  Future<void> init() async {
+    // No initialization needed
+  }
+
+  // Schedule task notification (simulated with delayed dialog)
   Future<void> scheduleTaskNotification({
+    required BuildContext context,
     required String title,
     required String body,
     required DateTime scheduledDate,
-    required int id,
   }) async {
-    await _flutterLocalNotificationsPlugin.zonedSchedule(
-      id,
-      title,
-      body,
-      tz.TZDateTime.from(scheduledDate, tz.local),
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'task_channel',
-          'Task Reminders',
-          channelDescription: 'Reminders for your tasks',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-      ),
-      androidAllowWhileIdle: true,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-    );
-  }
+    final now = DateTime.now();
+    final delay = scheduledDate.difference(now);
 
-  Future<void> showInstantNotification(String title, String body) async {
-    await _flutterLocalNotificationsPlugin.show(
-      0,
-      title,
-      body,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'instant_channel',
-          'Instant Notifications',
-          channelDescription: 'Immediate notifications',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-      ),
-    );
+    if (delay.inSeconds > 0) {
+      Future.delayed(delay, () {
+        if (context.mounted) {
+          showSnackBarNotification(context, '$title: $body');
+        }
+      });
+    }
   }
 }

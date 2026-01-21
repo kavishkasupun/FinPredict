@@ -87,20 +87,19 @@ class _TaskScreenState extends State<TaskScreen> {
   }
 
   void _sendTaskNotification(String taskTitle, DateTime dueDate) {
-    // In a real app, you would use flutter_local_notifications package
-    // This is a placeholder for notification logic
-
     final now = DateTime.now();
     final difference = dueDate.difference(now);
 
     if (difference.inHours <= 24) {
-      // Show immediate warning for tasks due within 24 hours
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        CustomDialog.showWarning(
-          context,
-          'Task Reminder: "$taskTitle" is due within 24 hours!',
-        );
-      });
+      // Show snackbar notification
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Task Reminder: "$taskTitle" is due within 24 hours!'),
+          backgroundColor: const Color(0xFFF59E0B),
+          duration: const Duration(seconds: 5),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
