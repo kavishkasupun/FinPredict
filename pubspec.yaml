@@ -19,6 +19,10 @@ dependencies:
   
   # Google Sign In
   google_sign_in: ^6.1.5
+
+  # ML Model
+  onnxruntime: ^1.4.1
+  path_provider: ^2.1.1
   
   # UI & Design
   lottie: ^2.7.0
@@ -32,6 +36,8 @@ dependencies:
   intl: ^0.19.0
   shared_preferences: ^2.2.2
   uuid: ^4.3.0
+  flutter_local_notifications: ^17.0.0
+  timezone: ^0.9.2
   
   # HTTP & APIs
   http: ^1.1.0
@@ -50,4 +56,4 @@ flutter:
   assets:
     - assets/images/
     - assets/animations/finance1.json
-    - assets/models/
+    - assets/ml/   

@@ -1,0 +1,293 @@
+{
+  "model_name": "Logistic Regression",
+  "model_version": "1.0",
+  "accuracy": 0.9828835774865073,
+  "train_accuracy": 0.982844365627048,
+  "features": {
+    "all": [
+      "age",
+      "gender",
+      "education_level",
+      "employment_status",
+      "job_title",
+      "monthly_income_rs",
+      "monthly_expenses_rs",
+      "savings_rs",
+      "has_loan",
+      "loan_type",
+      "loan_amount_usd",
+      "loan_term_months",
+      "monthly_emi_usd",
+      "loan_interest_rate_pct",
+      "debt_to_income_ratio",
+      "credit_score",
+      "savings_to_income_ratio",
+      "region"
+    ],
+    "categorical": [
+      "gender",
+      "education_level",
+      "employment_status",
+      "job_title",
+      "has_loan",
+      "loan_type",
+      "region"
+    ],
+    "numerical": [
+      "age",
+      "monthly_income_rs",
+      "monthly_expenses_rs",
+      "savings_rs",
+      "loan_amount_usd",
+      "loan_term_months",
+      "monthly_emi_usd",
+      "loan_interest_rate_pct",
+      "debt_to_income_ratio",
+      "credit_score",
+      "savings_to_income_ratio"
+    ],
+    "count": 18
+  },
+  "target": {
+    "name": "expenses_over_income",
+    "classes": [
+      "Normal",
+      "Expense Alert"
+    ],
+    "mapping": {
+      "0": "Normal",
+      "1": "Expense Alert"
+    }
+  },
+  "preprocessing": {
+    "scaler": "StandardScaler",
+    "feature_stats": {
+      "age": {
+        "mean": 43.387717336828715,
+        "std": 14.950737374047515,
+        "min": 18.0,
+        "max": 69.0
+      },
+      "monthly_income_rs": {
+        "mean": 276412.9580824241,
+        "std": 130181.19351711994,
+        "min": 50003.7,
+        "max": 499982.9
+      },
+      "monthly_expenses_rs": {
+        "mean": 248903.54091907936,
+        "std": 128868.68455791082,
+        "min": 30457.1,
+        "max": 594405.2
+      },
+      "savings_rs": {
+        "mean": 24068105.425364897,
+        "std": 18879044.190255567,
+        "min": 62642.06,
+        "max": 121920777.4
+      },
+      "loan_amount_usd": {
+        "mean": 100333.69453718339,
+        "std": 152545.52286741658,
+        "min": 0.0,
+        "max": 499935.79
+      },
+      "loan_term_months": {
+        "mean": 58.36508732025136,
+        "std": 104.63497286923777,
+        "min": 0.0,
+        "max": 360.0
+      },
+      "monthly_emi_usd": {
+        "mean": 3109.644591156174,
+        "std": 6502.865521280263,
+        "min": 0.0,
+        "max": 47723.84
+      },
+      "loan_interest_rate_pct": {
+        "mean": 6.629705077296735,
+        "std": 9.482761370311646,
+        "min": 0.0,
+        "max": 30.0
+      },
+      "debt_to_income_ratio": {
+        "mean": 1.1954874898801033,
+        "std": 3.761705572134524,
+        "min": 0.0,
+        "max": 90.67
+      },
+      "credit_score": {
+        "mean": 575.2027063495124,
+        "std": 159.0973104896115,
+        "min": 300.0,
+        "max": 850.0
+      },
+      "savings_to_income_ratio": {
+        "mean": 5.053546011796908,
+        "std": 2.847122591149491,
+        "min": 0.1,
+        "max": 10.0
+      }
+    },
+    "category_mappings": {
+      "gender": {
+        "encoded_to_original": {
+          "0": "Female",
+          "1": "Male",
+          "2": "Other"
+        },
+        "original_to_encoded": {
+          "Female": 0,
+          "Male": 1,
+          "Other": 2
+        },
+        "classes": [
+          "Female",
+          "Male",
+          "Other"
+        ]
+      },
+      "education_level": {
+        "encoded_to_original": {
+          "0": "Bachelor",
+          "1": "High School",
+          "2": "Master",
+          "3": "Other",
+          "4": "PhD"
+        },
+        "original_to_encoded": {
+          "Bachelor": 0,
+          "High School": 1,
+          "Master": 2,
+          "Other": 3,
+          "PhD": 4
+        },
+        "classes": [
+          "Bachelor",
+          "High School",
+          "Master",
+          "Other",
+          "PhD"
+        ]
+      },
+      "employment_status": {
+        "encoded_to_original": {
+          "0": "Employed",
+          "1": "Self-employed",
+          "2": "Student",
+          "3": "Unemployed"
+        },
+        "original_to_encoded": {
+          "Employed": 0,
+          "Self-employed": 1,
+          "Student": 2,
+          "Unemployed": 3
+        },
+        "classes": [
+          "Employed",
+          "Self-employed",
+          "Student",
+          "Unemployed"
+        ]
+      },
+      "job_title": {
+        "encoded_to_original": {
+          "0": "Accountant",
+          "1": "Doctor",
+          "2": "Driver",
+          "3": "Engineer",
+          "4": "Manager",
+          "5": "Salesperson",
+          "6": "Student",
+          "7": "Teacher",
+          "8": "Unemployed"
+        },
+        "original_to_encoded": {
+          "Accountant": 0,
+          "Doctor": 1,
+          "Driver": 2,
+          "Engineer": 3,
+          "Manager": 4,
+          "Salesperson": 5,
+          "Student": 6,
+          "Teacher": 7,
+          "Unemployed": 8
+        },
+        "classes": [
+          "Accountant",
+          "Doctor",
+          "Driver",
+          "Engineer",
+          "Manager",
+          "Salesperson",
+          "Student",
+          "Teacher",
+          "Unemployed"
+        ]
+      },
+      "has_loan": {
+        "encoded_to_original": {
+          "0": "No",
+          "1": "Yes"
+        },
+        "original_to_encoded": {
+          "No": 0,
+          "Yes": 1
+        },
+        "classes": [
+          "No",
+          "Yes"
+        ]
+      },
+      "loan_type": {
+        "encoded_to_original": {
+          "0": "Business",
+          "1": "Car",
+          "2": "Education",
+          "3": "Home"
+        },
+        "original_to_encoded": {
+          "Business": 0,
+          "Car": 1,
+          "Education": 2,
+          "Home": 3
+        },
+        "classes": [
+          "Business",
+          "Car",
+          "Education",
+          "Home"
+        ]
+      },
+      "region": {
+        "encoded_to_original": {
+          "0": "Africa",
+          "1": "Asia",
+          "2": "Europe",
+          "3": "North America",
+          "4": "Other"
+        },
+        "original_to_encoded": {
+          "Africa": 0,
+          "Asia": 1,
+          "Europe": 2,
+          "North America": 3,
+          "Other": 4
+        },
+        "classes": [
+          "Africa",
+          "Asia",
+          "Europe",
+          "North America",
+          "Other"
+        ]
+      }
+    }
+  },
+  "formats": {
+    "pkl": "finpredict_model.pkl",
+    "onnx": "finpredict_model.onnx"
+  },
+  "description": "FinPredict Expense Alert Model - Predicts if user expenses exceed income",
+  "created_date": "2026-03-03 13:36:26"
+}

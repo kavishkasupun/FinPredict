@@ -3,6 +3,8 @@ import 'package:finpredict/features/auth/screens/login_screen.dart';
 import 'package:finpredict/features/auth/screens/splash_screen.dart';
 import 'package:finpredict/features/dashboard/screens/home_screen.dart';
 import 'package:finpredict/services/firebase_service.dart';
+import 'package:finpredict/services/ml_service.dart';
+import 'package:finpredict/services/notification_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +14,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   await FirebaseService().init();
+
+  // Initialize ML Service (load model in background)
+  MLService().loadModel();
+
+  // Initialize Notification Service
+  await NotificationService().init();
 
   runApp(
     MultiProvider(
@@ -66,8 +74,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final currentUser = FirebaseAuth.instance.currentUser;
 
       print('📱 Current User in AuthWrapper: ${currentUser?.uid}');
-      print('📱 Current User Email: ${currentUser?.email}');
-      print('📱 User Logged In: ${currentUser != null}');
 
       if (currentUser != null) {
         // For Google users or verified email users
@@ -80,11 +86,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
           final userExists =
               await FirebaseService().checkUserExists(currentUser.uid);
 
-          print('📱 User exists in Firestore: $userExists');
-
           if (!userExists) {
-            print(
-                '⚠️ User exists in Auth but not in Firestore. Creating user in Firestore...');
             // Create user in Firestore if they don't exist
             final userData = {
               'uid': currentUser.uid,
@@ -93,10 +95,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
                   'User',
               'email': currentUser.email,
               'userType': isGoogleUser ? 'Google User' : 'Regular User',
+              'employmentType': 'employee', // Default
               'emailVerified': isEmailVerified,
               'accountStatus': 'active',
               'createdAt': DateTime.now().toIso8601String(),
               'monthlyBudget': 60000.0,
+              'totalIncome': 0.0,
+              'monthlyIncome': 0.0,
               'totalSavings': 0.0,
               'isGoogleUser': isGoogleUser,
               'lastLogin': DateTime.now().toIso8601String(),
@@ -116,7 +121,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         } else {
           // Email not verified - show login screen
           print('⚠️ Email not verified, showing login screen');
-          // Sign out the user so they can verify email
           await FirebaseAuth.instance.signOut();
         }
       }
@@ -124,22 +128,26 @@ class _AuthWrapperState extends State<AuthWrapper> {
       print('❌ Error checking auth status: $e');
     }
 
-    // If we reach here, user is not logged in or there was an error
     setState(() {
       _isLoggedIn = false;
       _isLoading = false;
     });
   }
 
-  void _handleSplashComplete() {
-    // This is called when splash screen animation completes
-    // Auth check is already done in initState, so we don't need to do anything here
+  // Function to handle splash animation completion
+  void _onSplashComplete() {
+    // This function is called when splash animation completes
+    // We don't need to do anything here as auth check is already done
+    print('Splash animation completed');
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return SplashScreen(onAnimationComplete: _handleSplashComplete);
+      // FIXED: Added required onAnimationComplete parameter
+      return SplashScreen(
+        onAnimationComplete: _onSplashComplete, // Pass the callback function
+      );
     }
 
     return _isLoggedIn ? const HomeScreen() : const LoginScreen();
