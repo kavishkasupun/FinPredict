@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:provider/provider.dart';
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
@@ -17,8 +16,9 @@ import 'package:finpredict/features/expenses/screens/expense_list_screen.dart';
 import 'package:finpredict/features/income/screens/add_income_screen.dart';
 import 'package:finpredict/features/income/screens/income_list_screen.dart';
 import 'package:finpredict/features/tasks/screens/task_screen.dart' as tasks;
-import 'package:finpredict/features/loans/screens/loan_screen.dart' as loans;
+import 'package:finpredict/features/loans/screens/loan_list_screen.dart';
 import 'package:finpredict/features/chat/screens/chat_screen.dart';
+import 'package:finpredict/features/prediction/screens/prediction_summary_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -46,8 +46,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Map<String, dynamic>? _forecast;
 
   bool _isLoading = true;
-  bool _showExpenseWarning = false;
+  bool _hasTransactions = false;
   String _selectedTimeRange = 'This Month';
+  String _userType = 'General User';
+  bool _notificationsEnabled = true;
+
+  // Track last shown notification level to avoid spamming
+  String _lastShownWarningLevel = '';
+  DateTime _lastNotificationTime =
+      DateTime.now().subtract(const Duration(hours: 1));
 
   final List<String> _timeRanges = [
     'This Week',
@@ -78,14 +85,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _initializeApp() async {
-    // Initialize ML Model
     await _mlService.loadModel();
-
-    // Initialize Notifications
     await _notificationService.init();
-
-    // Load user data
     await _loadUserData();
+
+    // Check notification settings
+    final settings = await _notificationService.checkNotificationSettings();
+    setState(() {
+      _notificationsEnabled = settings;
+    });
   }
 
   Future<void> _loadUserData() async {
@@ -97,7 +105,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _currentUser = FirebaseAuth.instance.currentUser;
 
       if (_currentUser != null) {
-        // Load user data from Firebase
         final userData = await _firebaseService.getUserData(_currentUser!.uid);
 
         if (userData != null) {
@@ -105,20 +112,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             _userData = userData;
             _budgetLimit =
                 (userData['monthlyBudget'] as num?)?.toDouble() ?? 60000.0;
+            _userType = userData['userType'] ??
+                userData['employmentType'] ??
+                _detectUserTypeFromData(userData) ??
+                'General User';
           });
 
-          // Load actual data
           await _loadCurrentMonthData();
           await _loadRecentTransactions();
 
-          // Run AI prediction
-          await _runAIPrediction();
+          _hasTransactions =
+              await _firebaseService.hasAnyTransactions(_currentUser!.uid);
 
-          // Check expense alert
-          _checkExpenseAlert();
+          if (_hasTransactions) {
+            await _runAIPrediction();
+          } else {
+            setState(() {
+              _aiPrediction = {
+                'hasData': false,
+                'alert': false,
+                'warningLevel': 'no_data',
+                'userType': _userType,
+                'userTypeDisplay': _userType,
+                'message':
+                    '👋 Welcome! Add your first income or expense to see AI insights',
+                'detailedMessage': 'Start by adding your first transaction',
+                'shortMessage': 'Welcome! Start tracking your finances',
+                'expense_percentage': 0,
+                'predicted_monthly_expense': 0,
+              };
+              _forecast = {
+                'hasData': false,
+                'message': 'Add transactions to see predictions',
+                'monthlyProjection': 0,
+              };
+            });
+          }
         } else {
           _setDefaultUserData();
         }
+      } else {
+        // User not logged in - still initialize for notifications
+        await _initializeWithoutUser();
       }
     } catch (e) {
       print('Error loading user data: $e');
@@ -130,6 +165,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
   }
 
+  Future<void> _initializeWithoutUser() async {
+    // Initialize with default values for non-logged in users
+    setState(() {
+      _userData = {
+        'name': 'Guest User',
+        'userType': 'Guest',
+        'monthlyBudget': 0,
+      };
+      _userType = 'Guest';
+      _hasTransactions = false;
+      _aiPrediction = {
+        'hasData': false,
+        'alert': false,
+        'warningLevel': 'no_user',
+        'message': '👋 Please login to see your financial insights',
+        'detailedMessage': 'Login or create an account to start tracking',
+        'shortMessage': 'Login to continue',
+      };
+    });
+  }
+
+  String _detectUserTypeFromData(Map<String, dynamic> data) {
+    final age = data['age'] ?? 25;
+    final income = data['monthlyIncome'] ?? 0;
+
+    if (age < 23 && income < 20000) return 'Student';
+    if (income > 50000) return 'Employee';
+    return 'General User';
+  }
+
   Future<void> _loadCurrentMonthData() async {
     try {
       if (_currentUser != null) {
@@ -137,7 +202,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         final firstDayOfMonth = DateTime(now.year, now.month, 1);
         final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
 
-        // Get expenses for current month
         final expensesSnapshot = await FirebaseFirestore.instance
             .collection('users')
             .doc(_currentUser!.uid)
@@ -148,7 +212,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 isLessThanOrEqualTo: lastDayOfMonth.toIso8601String())
             .get();
 
-        // Get income for current month
         final incomeSnapshot = await FirebaseFirestore.instance
             .collection('users')
             .doc(_currentUser!.uid)
@@ -183,7 +246,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _loadRecentTransactions() async {
     try {
       if (_currentUser != null) {
-        // Load recent expenses
         final expensesSnapshot = await FirebaseFirestore.instance
             .collection('users')
             .doc(_currentUser!.uid)
@@ -199,7 +261,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           return data;
         }).toList();
 
-        // Load recent income
         final incomeSnapshot = await FirebaseFirestore.instance
             .collection('users')
             .doc(_currentUser!.uid)
@@ -220,50 +281,179 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  // ============================================
+  // FIXED: AI Prediction with monthly prediction amount and notifications
+  // ============================================
   Future<void> _runAIPrediction() async {
     try {
-      // Get previous expenses for forecasting
-      final previousExpenses = await _getPreviousExpenses(6); // Last 6 months
+      final previousExpenses = await _getPreviousExpenses(6);
 
-      // Prepare user features for ML model
       final userFeatures = {
         'age': _userData?['age'] ?? 30,
         'dependents': _userData?['dependents'] ?? 0,
         'savings': _savings,
         'budget': _budgetLimit,
-        'employment_type': _userData?['employmentType'] ?? 'employee',
+        'employmentType': _userData?['employmentType'] ?? _userType,
+        'userType': _userType,
+        'monthlyIncome': _currentIncome,
       };
 
-      // Get AI prediction
       final prediction = await _mlService.predictExpenseAlert(
         monthlyIncome: _currentIncome,
         monthlyExpenses: _currentExpense,
         userFeatures: userFeatures,
       );
 
-      // Get forecast
-      final forecast = await _mlService.forecastNextMonth(
+      final forecast = await _mlService.predictDailyExpenses(
         monthlyIncome: _currentIncome,
         monthlyExpenses: _currentExpense,
-        previousExpenses: previousExpenses,
+        userFeatures: userFeatures,
       );
 
+      // Calculate expense percentage correctly
+      final calculatedExpensePercentage = _currentIncome > 0
+          ? ((_currentExpense / _currentIncome) * 100).round()
+          : 0;
+
+      // Calculate predicted monthly expense
+      double predictedMonthlyExpense = _currentExpense;
+      if (forecast.containsKey('monthlyProjection')) {
+        predictedMonthlyExpense = forecast['monthlyProjection'];
+      }
+
       setState(() {
-        _aiPrediction = prediction;
+        _aiPrediction = {
+          ...prediction,
+          'expense_percentage':
+              prediction['expense_percentage'] ?? calculatedExpensePercentage,
+          'predicted_monthly_expense': predictedMonthlyExpense,
+        };
         _forecast = forecast;
+
+        if (prediction.containsKey('userTypeDisplay')) {
+          _userType = prediction['userTypeDisplay'];
+        }
       });
 
-      // Show notification if alert is triggered
-      if (prediction['alert'] == true) {
-        await _notificationService.showExpenseAlert(
-          currentExpense: _currentExpense,
-          monthlyIncome: _currentIncome,
-          percentage: (_currentExpense / _currentIncome) * 100,
-          aiMessage: prediction['message'],
-        );
-      }
+      // ============================================
+      // FIXED: Show notification for high/critical levels
+      // ============================================
+      await _checkAndShowNotification(prediction);
     } catch (e) {
       print('Error in AI prediction: $e');
+      // Fallback with correct percentage calculation and proper messages
+      final fallbackPercentage = _currentIncome > 0
+          ? ((_currentExpense / _currentIncome) * 100).round()
+          : 0;
+
+      final warningLevel = _getWarningLevelFromPercentage(fallbackPercentage);
+      final messages = _getFallbackMessages(fallbackPercentage);
+
+      setState(() {
+        _aiPrediction = {
+          'hasData': _hasTransactions,
+          'alert': warningLevel == 'critical' || warningLevel == 'high',
+          'warningLevel': warningLevel,
+          'userType': _userType,
+          'userTypeDisplay': _userType,
+          'message': messages['message'],
+          'detailedMessage': messages['detailedMessage'],
+          'shortMessage': messages['shortMessage'],
+          'expense_percentage': fallbackPercentage,
+          'predicted_monthly_expense':
+              _currentExpense * 1.1, // Simple fallback prediction
+        };
+      });
+
+      // Show notification for fallback as well
+      await _checkAndShowNotification({
+        'warningLevel': warningLevel,
+        'expense_percentage': fallbackPercentage,
+      });
+    }
+  }
+
+  // ============================================
+  // NEW: Check and show notification with rate limiting
+  // ============================================
+  Future<void> _checkAndShowNotification(
+      Map<String, dynamic> prediction) async {
+    if (!_notificationsEnabled || _currentUser == null) return;
+
+    final warningLevel = prediction['warningLevel'] ?? 'good';
+    final expensePercentage = prediction['expense_percentage'] ?? 0;
+
+    // Only show for high and critical
+    if (warningLevel != 'critical' && warningLevel != 'high') {
+      return;
+    }
+
+    // Rate limiting - don't show more than once every 30 minutes for same level
+    final now = DateTime.now();
+    final timeDiff = now.difference(_lastNotificationTime).inMinutes;
+
+    if (warningLevel == _lastShownWarningLevel && timeDiff < 30) {
+      debugPrint(
+          '⏭️ Skipping duplicate notification (same level within 30 minutes)');
+      return;
+    }
+
+    // Update last shown
+    _lastShownWarningLevel = warningLevel;
+    _lastNotificationTime = now;
+
+    // Show notification
+    await _notificationService.showExpenseAlert(
+      currentExpense: _currentExpense,
+      monthlyIncome: _currentIncome,
+      percentage: expensePercentage.toDouble(),
+      aiMessage: prediction['message'] ?? '',
+      warningLevel: warningLevel,
+    );
+  }
+
+  // ============================================
+  // FIXED: Helper method to determine warning level from percentage
+  // ============================================
+  String _getWarningLevelFromPercentage(int percentage) {
+    if (percentage >= 90) return 'critical';
+    if (percentage >= 80) return 'high';
+    if (percentage >= 70) return 'moderate';
+    return 'good';
+  }
+
+  // ============================================
+  // FIXED: Helper method to get fallback messages based on percentage
+  // ============================================
+  Map<String, String> _getFallbackMessages(int percentage) {
+    if (percentage >= 90) {
+      return {
+        'message': '⚠️ CRITICAL: You\'ve spent $percentage% of your income!',
+        'detailedMessage':
+            'Your expenses are dangerously high. Immediate action required!',
+        'shortMessage': 'Critical spending alert!',
+      };
+    } else if (percentage >= 80) {
+      return {
+        'message':
+            '⚠️ HIGH SPENDING: You\'ve spent $percentage% of your income',
+        'detailedMessage':
+            'Your spending is very high. Consider reducing expenses.',
+        'shortMessage': 'High spending detected.',
+      };
+    } else if (percentage >= 70) {
+      return {
+        'message': 'ℹ️ MODERATE: You\'ve spent $percentage% of your income',
+        'detailedMessage': 'You\'re spending moderately. Keep monitoring.',
+        'shortMessage': 'Moderate spending.',
+      };
+    } else {
+      return {
+        'message': '✅ GOOD JOB! You\'ve spent only $percentage% of your income',
+        'detailedMessage':
+            'You\'re saving ${100 - percentage}% of your income. Great work!',
+        'shortMessage': 'Keep up the good work!',
+      };
     }
   }
 
@@ -303,41 +493,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         'name': _currentUser?.displayName ??
             _currentUser?.email?.split('@').first ??
             'User',
+        'userType': 'General User',
+        'employmentType': 'employee',
         'monthlyBudget': 60000.0,
         'currentExpense': 0.0,
       };
+      _userType = 'General User';
       _budgetLimit = 60000.0;
       _currentExpense = 0.0;
       _currentIncome = 0.0;
       _savings = 0.0;
+      _hasTransactions = false;
     });
-  }
-
-  void _checkExpenseAlert() {
-    if (_currentIncome <= 0) return;
-
-    final expensePercentage = (_currentExpense / _currentIncome) * 100;
-    setState(() {
-      _showExpenseWarning =
-          expensePercentage > 80 || (_aiPrediction?['alert'] == true);
-    });
-
-    if (_showExpenseWarning) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        CustomDialog.showWarning(
-          context,
-          _aiPrediction?['message'] ??
-              '⚠️ Warning: Your expenses have reached ${expensePercentage.round()}% of your income! Consider reducing unnecessary spending.',
-        );
-      });
-    }
   }
 
   Future<void> _refreshData() async {
     await _loadUserData();
   }
 
-  // Navigation methods
   void _navigateToAddExpense() {
     Navigator.push(
       context,
@@ -384,7 +557,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _navigateToLoans() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const loans.LoanScreen()),
+      MaterialPageRoute(builder: (context) => const LoanListScreen()),
     );
   }
 
@@ -393,6 +566,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       context,
       MaterialPageRoute(builder: (context) => const ChatScreen()),
     );
+  }
+
+  void _navigateToPredictionSummary() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PredictionSummaryScreen(
+          userData: _userData,
+          currentIncome: _currentIncome,
+          currentExpense: _currentExpense,
+          savings: _savings,
+          aiPrediction: _aiPrediction,
+          forecast: _forecast,
+          userId: _currentUser?.uid ?? '',
+        ),
+      ),
+    ).then((_) => _refreshData());
   }
 
   @override
@@ -421,9 +611,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
     }
 
-    // FIXED: Explicitly convert to double
+    // Calculate expense percentage correctly for display
     final double expensePercentage =
-        (_currentIncome > 0) ? (_currentExpense / _currentIncome) * 100 : 0.0;
+        _currentIncome > 0 ? (_currentExpense / _currentIncome) * 100 : 0.0;
 
     final double savingsRate =
         (_currentIncome > 0) ? (_savings / _currentIncome) * 100 : 0.0;
@@ -431,7 +621,95 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final userName = _userData?['name'] ??
         _currentUser?.displayName ??
         _currentUser?.email?.split('@').first ??
-        'User';
+        'Guest';
+
+    // Get expense percentage from aiPrediction or use calculated value
+    final int displayExpensePercentage =
+        (_aiPrediction?['expense_percentage'] ?? expensePercentage).round();
+
+    // Get predicted monthly expense
+    final double predictedMonthlyExpense =
+        _aiPrediction?['predicted_monthly_expense'] ?? _currentExpense;
+
+    final bool hasData = _aiPrediction?['hasData'] ?? false;
+    final String warningLevel = _aiPrediction?['warningLevel'] ?? 'good';
+
+    // ============================================
+    // FIXED: Get colors and icons based on warning level
+    // ============================================
+    Color getAlertColor() {
+      switch (warningLevel) {
+        case 'critical':
+          return const Color(0xFFEF4444); // Red
+        case 'high':
+          return const Color(0xFFF59E0B); // Orange
+        case 'moderate':
+          return const Color(0xFFFBA002); // Yellow
+        case 'good':
+          return const Color(0xFF10B981); // Green
+        default:
+          return const Color(0xFF3B82F6); // Blue
+      }
+    }
+
+    IconData getAlertIcon() {
+      switch (warningLevel) {
+        case 'critical':
+          return Icons.warning_amber_rounded;
+        case 'high':
+          return Icons.warning;
+        case 'moderate':
+          return Icons.info_outline;
+        case 'good':
+          return Icons.check_circle_outline;
+        default:
+          return Icons.auto_graph;
+      }
+    }
+
+    // ============================================
+    // FIXED: Get the correct message from aiPrediction based on warning level
+    // ============================================
+    String getDisplayMessage() {
+      if (!hasData) {
+        return _aiPrediction?['message'] ??
+            '👋 Welcome! Add your first transaction';
+      }
+
+      // Check warning level and return appropriate message
+      switch (warningLevel) {
+        case 'critical':
+          return '⚠️ CRITICAL: You\'ve spent $displayExpensePercentage% of your income!';
+        case 'high':
+          return '⚠️ HIGH SPENDING: You\'ve spent $displayExpensePercentage% of your income';
+        case 'moderate':
+          return 'ℹ️ MODERATE: You\'ve spent $displayExpensePercentage% of your income';
+        case 'good':
+          return '✅ GOOD JOB! You\'ve spent only $displayExpensePercentage% of your income';
+        default:
+          return _aiPrediction?['message'] ?? '✅ Your finances look good!';
+      }
+    }
+
+    String getDetailedMessage() {
+      if (!hasData) {
+        return 'Start by adding your first income or expense';
+      }
+
+      switch (warningLevel) {
+        case 'critical':
+          return 'Your expenses are dangerously high. You have only ${100 - displayExpensePercentage}% of income remaining. Immediate action required!';
+        case 'high':
+          return 'Your spending is very high. Consider reducing discretionary expenses like dining out and entertainment.';
+        case 'moderate':
+          return 'You\'re spending moderately. Try to keep expenses under 70% to maintain healthy savings.';
+        case 'good':
+          return 'You\'re saving ${100 - displayExpensePercentage}% of your income. Great financial discipline!';
+        default:
+          return _aiPrediction?['detailedMessage'] ??
+              'Keep tracking your expenses';
+      }
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
@@ -465,12 +743,56 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Welcome Back,',
-                                  style: TextStyle(
-                                    color: const Color(0xFF94A3B8),
-                                    fontSize: 14,
-                                  ),
+                                Row(
+                                  children: [
+                                    Text(
+                                      _currentUser != null
+                                          ? 'Welcome Back,'
+                                          : 'Welcome,',
+                                      style: TextStyle(
+                                        color: const Color(0xFF94A3B8),
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    if (_currentUser != null)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color:
+                                              getAlertColor().withOpacity(0.2),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                          border: Border.all(
+                                            color: getAlertColor()
+                                                .withOpacity(0.5),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.person_outline,
+                                              color: getAlertColor(),
+                                              size: 14,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              _userType,
+                                              style: TextStyle(
+                                                color: getAlertColor(),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
@@ -486,39 +808,79 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               ],
                             ),
                           ),
-                          IconButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (context) =>
-                                        const ProfileScreen()),
-                              );
-                            },
-                            icon: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    const Color(0xFF3B82F6).withOpacity(0.2),
-                                    const Color(0xFF313B2F).withOpacity(0.2),
-                                  ],
+                          Row(
+                            children: [
+                              if (_currentUser != null) ...[
+                                IconButton(
+                                  onPressed: _navigateToPredictionSummary,
+                                  icon: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          const Color(0xFF3B82F6)
+                                              .withOpacity(0.2),
+                                          const Color(0xFF8B5CF6)
+                                              .withOpacity(0.2),
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(
+                                      Icons.analytics,
+                                      color: Color(0xFF3B82F6),
+                                      size: 24,
+                                    ),
+                                  ),
                                 ),
-                                borderRadius: BorderRadius.circular(12),
+                                const SizedBox(width: 8),
+                              ],
+                              IconButton(
+                                onPressed: () {
+                                  if (_currentUser != null) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (context) =>
+                                              const ProfileScreen()),
+                                    );
+                                  } else {
+                                    // Navigate to login screen
+                                    Navigator.pushNamed(context, '/login');
+                                  }
+                                },
+                                icon: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        const Color(0xFFFBA002)
+                                            .withOpacity(0.2),
+                                        const Color(0xFFFFD166)
+                                            .withOpacity(0.2),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    _currentUser != null
+                                        ? Icons.person
+                                        : Icons.login,
+                                    color: const Color(0xFFFBA002),
+                                    size: 24,
+                                  ),
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.person,
-                                color: Color(0xFF3B82F6),
-                                size: 28,
-                              ),
-                            ),
+                            ],
                           ),
                         ],
                       ),
 
                       const SizedBox(height: 20),
 
-                      // AI Status Card
+                      // ============================================
+                      // FIXED: AI Status Card with monthly prediction
+                      // ============================================
                       if (_aiPrediction != null) ...[
                         GlassCard(
                           width: double.infinity,
@@ -526,521 +888,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           blur: 15,
                           gradient: LinearGradient(
                             colors: [
-                              _aiPrediction!['alert'] == true
-                                  ? const Color(0xFFEF4444).withOpacity(0.2)
-                                  : const Color(0xFF10B981).withOpacity(0.2),
+                              getAlertColor().withOpacity(0.2),
                               const Color(0xFF1E293B),
                             ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: _aiPrediction!['alert'] == true
-                                        ? const Color(0xFFEF4444)
-                                            .withOpacity(0.2)
-                                        : const Color(0xFF10B981)
-                                            .withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(
-                                    _aiPrediction!['alert'] == true
-                                        ? Icons.warning_amber_rounded
-                                        : Icons.check_circle,
-                                    color: _aiPrediction!['alert'] == true
-                                        ? const Color(0xFFEF4444)
-                                        : const Color(0xFF10B981),
-                                    size: 32,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'AI Analysis',
-                                        style: TextStyle(
-                                          color: const Color(0xFF94A3B8),
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        _aiPrediction!['message'],
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      if (_forecast != null) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _forecast!['message'],
-                                          style: TextStyle(
-                                            color: _forecast!['trend'] ==
-                                                    'increasing'
-                                                ? const Color(0xFFF59E0B)
-                                                : const Color(0xFF10B981),
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
-
-                      // Financial Overview Card
-                      GlassCard(
-                        width: double.infinity,
-                        borderRadius: 25,
-                        blur: 20,
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Financial Overview',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF1E293B),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: DropdownButton<String>(
-                                      value: _selectedTimeRange,
-                                      dropdownColor: const Color(0xFF1E293B),
-                                      underline: const SizedBox(),
-                                      icon: const Icon(Icons.arrow_drop_down,
-                                          color: Color(0xFFFBA002), size: 20),
-                                      style: const TextStyle(
-                                          color: Colors.white, fontSize: 12),
-                                      items: _timeRanges.map((range) {
-                                        return DropdownMenuItem(
-                                          value: range,
-                                          child: Text(range),
-                                        );
-                                      }).toList(),
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _selectedTimeRange = value!;
-                                        });
-                                        _loadCurrentMonthData();
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 20),
-
-                              // Stats Row
-                              LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final isWide = constraints.maxWidth > 400;
-                                  return isWide
-                                      ? Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceAround,
-                                          children: [
-                                            _buildStatCard(
-                                              'Income',
-                                              'Rs. ${_currentIncome.toStringAsFixed(0)}',
-                                              Icons.trending_up,
-                                              const Color(0xFF10B981),
-                                            ),
-                                            _buildStatCard(
-                                              'Expenses',
-                                              'Rs. ${_currentExpense.toStringAsFixed(0)}',
-                                              Icons.trending_down,
-                                              const Color(0xFFEF4444),
-                                            ),
-                                            _buildStatCard(
-                                              'Savings',
-                                              'Rs. ${_savings.toStringAsFixed(0)}',
-                                              Icons.savings,
-                                              _savings >= 0
-                                                  ? const Color(0xFF3B82F6)
-                                                  : const Color(0xFFEF4444),
-                                            ),
-                                          ],
-                                        )
-                                      : Column(
-                                          children: [
-                                            Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.spaceAround,
-                                              children: [
-                                                _buildStatCard(
-                                                  'Income',
-                                                  'Rs. ${_currentIncome.toStringAsFixed(0)}',
-                                                  Icons.trending_up,
-                                                  const Color(0xFF10B981),
-                                                ),
-                                                _buildStatCard(
-                                                  'Expenses',
-                                                  'Rs. ${_currentExpense.toStringAsFixed(0)}',
-                                                  Icons.trending_down,
-                                                  const Color(0xFFEF4444),
-                                                ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 16),
-                                            _buildStatCard(
-                                              'Savings',
-                                              'Rs. ${_savings.toStringAsFixed(0)}',
-                                              Icons.savings,
-                                              _savings >= 0
-                                                  ? const Color(0xFF3B82F6)
-                                                  : const Color(0xFFEF4444),
-                                            ),
-                                          ],
-                                        );
-                                },
-                              ),
-
-                              const SizedBox(height: 20),
-
-                              // Expense Gauge (now based on income)
-                              SizedBox(
-                                height: 180,
-                                child: SfRadialGauge(
-                                  axes: <RadialAxis>[
-                                    RadialAxis(
-                                      minimum: 0,
-                                      maximum: 100,
-                                      showLabels: false,
-                                      showTicks: false,
-                                      axisLineStyle: const AxisLineStyle(
-                                        thickness: 0.1,
-                                        cornerStyle: CornerStyle.bothCurve,
-                                        color: Color(0xFF334155),
-                                      ),
-                                      pointers: <GaugePointer>[
-                                        RangePointer(
-                                          value:
-                                              expensePercentage, // Now this is double
-                                          width: 0.2,
-                                          cornerStyle: CornerStyle.bothCurve,
-                                          gradient: const SweepGradient(
-                                            colors: <Color>[
-                                              Color(0xFF10B981),
-                                              Color(0xFFFBA002),
-                                              Color(0xFFEF4444),
-                                            ],
-                                          ),
-                                        ),
-                                        MarkerPointer(
-                                          value:
-                                              expensePercentage, // Now this is double
-                                          markerType: MarkerType.circle,
-                                          color: Colors.white,
-                                          borderWidth: 3,
-                                          borderColor: const Color(0xFFFBA002),
-                                          markerHeight: 15,
-                                          markerWidth: 15,
-                                        ),
-                                      ],
-                                      annotations: <GaugeAnnotation>[
-                                        GaugeAnnotation(
-                                          positionFactor: 0.1,
-                                          widget: Text(
-                                            '${expensePercentage.round()}%',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 28,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                        GaugeAnnotation(
-                                          positionFactor: 0.3,
-                                          widget: Text(
-                                            'of Income',
-                                            style: TextStyle(
-                                              color: const Color(0xFF94A3B8),
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                              const SizedBox(height: 10),
-
-                              // Savings Rate
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: (_savings >= 0
-                                          ? const Color(0xFF10B981)
-                                          : const Color(0xFFEF4444))
-                                      .withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: _savings >= 0
-                                        ? const Color(0xFF10B981)
-                                        : const Color(0xFFEF4444),
-                                  ),
-                                ),
-                                child: Text(
-                                  'Savings Rate: ${savingsRate.toStringAsFixed(1)}%',
-                                  style: TextStyle(
-                                    color: _savings >= 0
-                                        ? const Color(0xFF10B981)
-                                        : const Color(0xFFEF4444),
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Quick Actions
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildQuickAction(
-                              Icons.add_chart,
-                              'Add Expense',
-                              onTap: _navigateToAddExpense,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildQuickAction(
-                              Icons.account_balance_wallet,
-                              'Add Income',
-                              onTap: _navigateToAddIncome,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildQuickAction(
-                              Icons.list_alt,
-                              'Expenses',
-                              onTap: _navigateToExpenseList,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildQuickAction(
-                              Icons.analytics,
-                              'Income',
-                              onTap: _navigateToIncomeList,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildQuickAction(
-                              Icons.task,
-                              'Tasks',
-                              onTap: _navigateToTasks,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildQuickAction(
-                              Icons.money,
-                              'Loans',
-                              onTap: _navigateToLoans,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildQuickAction(
-                              Icons.chat,
-                              'AI Chat',
-                              onTap: _navigateToChat,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Recent Transactions
-                      GlassCard(
-                        width: double.infinity,
-                        borderRadius: 25,
-                        blur: 20,
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Recent Transactions',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              if (_recentExpenses.isEmpty &&
-                                  _recentIncome.isEmpty)
-                                Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(20),
-                                    child: Column(
-                                      children: [
-                                        Icon(
-                                          Icons.receipt,
-                                          color: const Color(0xFF94A3B8),
-                                          size: 48,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        const Text(
-                                          'No transactions yet',
-                                          style: TextStyle(
-                                            color: Color(0xFF94A3B8),
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                              else ...[
-                                // Combine and sort recent transactions
-                                ..._getCombinedTransactions()
-                                    .map((transaction) {
-                                  final isExpense =
-                                      transaction['type'] == 'expense';
-                                  final date =
-                                      DateTime.parse(transaction['date']);
-                                  final amount =
-                                      (transaction['amount'] as num).toDouble();
-
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: (isExpense
-                                                    ? const Color(0xFFEF4444)
-                                                    : const Color(0xFF10B981))
-                                                .withOpacity(0.1),
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                          ),
-                                          child: Icon(
-                                            isExpense
-                                                ? Icons.shopping_cart
-                                                : Icons.account_balance_wallet,
-                                            color: isExpense
-                                                ? const Color(0xFFEF4444)
-                                                : const Color(0xFF10B981),
-                                            size: 20,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                transaction['description'] ??
-                                                    (isExpense
-                                                        ? 'Expense'
-                                                        : 'Income'),
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                DateFormat('MMM dd, yyyy')
-                                                    .format(date),
-                                                style: TextStyle(
-                                                  color:
-                                                      const Color(0xFF94A3B8),
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Text(
-                                          '${isExpense ? '-' : '+'} Rs. ${amount.toStringAsFixed(0)}',
-                                          style: TextStyle(
-                                            color: isExpense
-                                                ? const Color(0xFFEF4444)
-                                                : const Color(0xFF10B981),
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }).take(5),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // AI Recommendations/Warning
-                      if (_showExpenseWarning) ...[
-                        GlassCard(
-                          width: double.infinity,
-                          borderRadius: 25,
-                          blur: 20,
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFEF4444), Color(0xFFF59E0B)],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
@@ -1049,32 +899,81 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             child: Column(
                               children: [
                                 Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Icon(
-                                      Icons.warning,
-                                      color: Colors.white,
-                                      size: 32,
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: getAlertColor().withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Icon(
+                                        getAlertIcon(),
+                                        color: getAlertColor(),
+                                        size: 32,
+                                      ),
                                     ),
-                                    const SizedBox(width: 12),
+                                    const SizedBox(width: 16),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          const Text(
-                                            'Expense Alert!',
+                                          Row(
+                                            children: [
+                                              Text(
+                                                !hasData
+                                                    ? '👋 Welcome!'
+                                                    : 'AI Analysis',
+                                                style: TextStyle(
+                                                  color:
+                                                      const Color(0xFF94A3B8),
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 2,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: getAlertColor()
+                                                      .withOpacity(0.2),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  warningLevel.toUpperCase(),
+                                                  style: TextStyle(
+                                                    color: getAlertColor(),
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          // ============================================
+                                          // FIXED: Use dynamic message based on warning level
+                                          // ============================================
+                                          Text(
+                                            getDisplayMessage(),
                                             style: TextStyle(
                                               color: Colors.white,
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
                                             ),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            'You\'ve spent ${expensePercentage.round()}% of your income',
-                                            style: const TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 14,
+                                            getDetailedMessage(),
+                                            style: TextStyle(
+                                              color: const Color(0xFF94A3B8),
+                                              fontSize: 13,
                                             ),
                                           ),
                                         ],
@@ -1082,26 +981,670 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                     ),
                                   ],
                                 ),
+
+                                // Expense percentage bar
                                 const SizedBox(height: 16),
-                                CustomButton(
-                                  text: 'View Tips to Save',
-                                  onPressed: () {
-                                    CustomDialog.showInfo(
-                                      context,
-                                      '💡 Money Saving Tips:\n\n'
-                                      '• Track all expenses daily\n'
-                                      '• Cook at home more often\n'
-                                      '• Cancel unused subscriptions\n'
-                                      '• Use public transport\n'
-                                      '• Set a daily spending limit\n'
-                                      '• Save 20% of your income first',
-                                    );
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1E293B),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'Current Expense Level',
+                                            style: TextStyle(
+                                              color: const Color(0xFF94A3B8),
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                          Text(
+                                            '$displayExpensePercentage%',
+                                            style: TextStyle(
+                                              color: getAlertColor(),
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: LinearProgressIndicator(
+                                          value: displayExpensePercentage / 100,
+                                          backgroundColor:
+                                              const Color(0xFF334155),
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                            getAlertColor(),
+                                          ),
+                                          minHeight: 8,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                // ============================================
+                                // NEW: Monthly Prediction Card
+                                // ============================================
+                                if (hasData) ...[
+                                  const SizedBox(height: 16),
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          const Color(0xFF3B82F6)
+                                              .withOpacity(0.1),
+                                          const Color(0xFF8B5CF6)
+                                              .withOpacity(0.1),
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: const Color(0xFF3B82F6)
+                                            .withOpacity(0.3),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(8),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF3B82F6)
+                                                    .withOpacity(0.2),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(
+                                                Icons.trending_up,
+                                                color: Color(0xFF3B82F6),
+                                                size: 20,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                const Text(
+                                                  'Predicted Monthly Expense',
+                                                  style: TextStyle(
+                                                    color: Color(0xFF94A3B8),
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  'Rs. ${predictedMonthlyExpense.toStringAsFixed(0)}',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: predictedMonthlyExpense >
+                                                    _currentIncome * 0.8
+                                                ? const Color(0xFFEF4444)
+                                                    .withOpacity(0.2)
+                                                : const Color(0xFF10B981)
+                                                    .withOpacity(0.2),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            predictedMonthlyExpense >
+                                                    _currentIncome * 0.8
+                                                ? 'High'
+                                                : 'Normal',
+                                            style: TextStyle(
+                                              color: predictedMonthlyExpense >
+                                                      _currentIncome * 0.8
+                                                  ? const Color(0xFFEF4444)
+                                                  : const Color(0xFF10B981),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+
+                                if (!hasData) ...[
+                                  const SizedBox(height: 20),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: CustomButton(
+                                          text: 'Add Income',
+                                          onPressed: _navigateToAddIncome,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: CustomButton(
+                                          text: 'Add Expense',
+                                          onPressed: _navigateToAddExpense,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      // Financial Overview Card - Only show if logged in
+                      if (_currentUser != null) ...[
+                        GlassCard(
+                          width: double.infinity,
+                          borderRadius: 25,
+                          blur: 20,
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Financial Overview',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF1E293B),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: DropdownButton<String>(
+                                        value: _selectedTimeRange,
+                                        dropdownColor: const Color(0xFF1E293B),
+                                        underline: const SizedBox(),
+                                        icon: const Icon(Icons.arrow_drop_down,
+                                            color: Color(0xFFFBA002), size: 20),
+                                        style: const TextStyle(
+                                            color: Colors.white, fontSize: 12),
+                                        items: _timeRanges.map((range) {
+                                          return DropdownMenuItem(
+                                            value: range,
+                                            child: Text(range),
+                                          );
+                                        }).toList(),
+                                        onChanged: (value) {
+                                          setState(() {
+                                            _selectedTimeRange = value!;
+                                          });
+                                          _loadCurrentMonthData();
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 20),
+
+                                // Stats Row
+                                LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final isWide = constraints.maxWidth > 400;
+                                    return isWide
+                                        ? Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceAround,
+                                            children: [
+                                              _buildStatCard(
+                                                'Income',
+                                                'Rs. ${_currentIncome.toStringAsFixed(0)}',
+                                                Icons.trending_up,
+                                                const Color(0xFF10B981),
+                                              ),
+                                              _buildStatCard(
+                                                'Expenses',
+                                                'Rs. ${_currentExpense.toStringAsFixed(0)}',
+                                                Icons.trending_down,
+                                                expensePercentage > 80
+                                                    ? const Color(0xFFEF4444)
+                                                    : const Color(0xFFFBA002),
+                                              ),
+                                              _buildStatCard(
+                                                'Savings',
+                                                'Rs. ${_savings.toStringAsFixed(0)}',
+                                                Icons.savings,
+                                                _savings >= 0
+                                                    ? const Color(0xFF3B82F6)
+                                                    : const Color(0xFFEF4444),
+                                              ),
+                                            ],
+                                          )
+                                        : Column(
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .spaceAround,
+                                                children: [
+                                                  _buildStatCard(
+                                                    'Income',
+                                                    'Rs. ${_currentIncome.toStringAsFixed(0)}',
+                                                    Icons.trending_up,
+                                                    const Color(0xFF10B981),
+                                                  ),
+                                                  _buildStatCard(
+                                                    'Expenses',
+                                                    'Rs. ${_currentExpense.toStringAsFixed(0)}',
+                                                    Icons.trending_down,
+                                                    expensePercentage > 80
+                                                        ? const Color(
+                                                            0xFFEF4444)
+                                                        : const Color(
+                                                            0xFFFBA002),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 16),
+                                              _buildStatCard(
+                                                'Savings',
+                                                'Rs. ${_savings.toStringAsFixed(0)}',
+                                                Icons.savings,
+                                                _savings >= 0
+                                                    ? const Color(0xFF3B82F6)
+                                                    : const Color(0xFFEF4444),
+                                              ),
+                                            ],
+                                          );
                                   },
-                                  backgroundColor: Colors.white,
-                                  textColor: const Color(0xFFEF4444),
+                                ),
+
+                                const SizedBox(height: 20),
+
+                                // Expense Gauge
+                                SizedBox(
+                                  height: 180,
+                                  child: SfRadialGauge(
+                                    axes: <RadialAxis>[
+                                      RadialAxis(
+                                        minimum: 0,
+                                        maximum: 100,
+                                        showLabels: false,
+                                        showTicks: false,
+                                        axisLineStyle: const AxisLineStyle(
+                                          thickness: 0.1,
+                                          cornerStyle: CornerStyle.bothCurve,
+                                          color: Color(0xFF334155),
+                                        ),
+                                        pointers: <GaugePointer>[
+                                          RangePointer(
+                                            value: displayExpensePercentage
+                                                .toDouble(),
+                                            width: 0.2,
+                                            cornerStyle: CornerStyle.bothCurve,
+                                            gradient: SweepGradient(
+                                              colors: <Color>[
+                                                const Color(0xFF10B981),
+                                                const Color(0xFFFBA002),
+                                                const Color(0xFFEF4444),
+                                              ],
+                                              stops: const [0.0, 0.7, 1.0],
+                                            ),
+                                          ),
+                                          MarkerPointer(
+                                            value: displayExpensePercentage
+                                                .toDouble(),
+                                            markerType: MarkerType.circle,
+                                            color: Colors.white,
+                                            borderWidth: 3,
+                                            borderColor:
+                                                const Color(0xFFFBA002),
+                                            markerHeight: 15,
+                                            markerWidth: 15,
+                                          ),
+                                        ],
+                                        annotations: <GaugeAnnotation>[
+                                          GaugeAnnotation(
+                                            positionFactor: 0.1,
+                                            widget: Text(
+                                              '$displayExpensePercentage%',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 28,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                          GaugeAnnotation(
+                                            positionFactor: 0.3,
+                                            widget: Text(
+                                              'of Income',
+                                              style: TextStyle(
+                                                color: const Color(0xFF94A3B8),
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                const SizedBox(height: 10),
+
+                                // Savings Rate
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: (_savings >= 0
+                                            ? const Color(0xFF10B981)
+                                            : const Color(0xFFEF4444))
+                                        .withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: _savings >= 0
+                                          ? const Color(0xFF10B981)
+                                          : const Color(0xFFEF4444),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Savings Rate: ${savingsRate.toStringAsFixed(1)}%',
+                                    style: TextStyle(
+                                      color: _savings >= 0
+                                          ? const Color(0xFF10B981)
+                                          : const Color(0xFFEF4444),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Quick Actions
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildQuickAction(
+                                Icons.add_chart,
+                                'Add Expense',
+                                onTap: _navigateToAddExpense,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildQuickAction(
+                                Icons.account_balance_wallet,
+                                'Add Income',
+                                onTap: _navigateToAddIncome,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildQuickAction(
+                                Icons.list_alt,
+                                'Expenses',
+                                onTap: _navigateToExpenseList,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildQuickAction(
+                                Icons.analytics,
+                                'Income',
+                                onTap: _navigateToIncomeList,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildQuickAction(
+                                Icons.task,
+                                'Tasks',
+                                onTap: _navigateToTasks,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildQuickAction(
+                                Icons.money,
+                                'Loans',
+                                onTap: _navigateToLoans,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildQuickAction(
+                                Icons.chat,
+                                'AI Chat',
+                                onTap: _navigateToChat,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Recent Transactions
+                        GlassCard(
+                          width: double.infinity,
+                          borderRadius: 25,
+                          blur: 20,
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Recent Transactions',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                if (_recentExpenses.isEmpty &&
+                                    _recentIncome.isEmpty)
+                                  Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(20),
+                                      child: Column(
+                                        children: [
+                                          Icon(
+                                            Icons.receipt,
+                                            color: const Color(0xFF94A3B8),
+                                            size: 48,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          const Text(
+                                            'No transactions yet',
+                                            style: TextStyle(
+                                              color: Color(0xFF94A3B8),
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Tap + to add your first transaction',
+                                            style: TextStyle(
+                                              color: const Color(0xFFFBA002),
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                else ...[
+                                  ..._getCombinedTransactions()
+                                      .take(5)
+                                      .map((transaction) {
+                                    final isExpense =
+                                        transaction['type'] == 'expense';
+                                    final date =
+                                        DateTime.parse(transaction['date']);
+                                    final amount =
+                                        (transaction['amount'] as num)
+                                            .toDouble();
+
+                                    return Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 12),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: (isExpense
+                                                      ? const Color(0xFFEF4444)
+                                                      : const Color(0xFF10B981))
+                                                  .withOpacity(0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: Icon(
+                                              isExpense
+                                                  ? Icons.shopping_cart
+                                                  : Icons
+                                                      .account_balance_wallet,
+                                              color: isExpense
+                                                  ? const Color(0xFFEF4444)
+                                                  : const Color(0xFF10B981),
+                                              size: 20,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  transaction['description'] ??
+                                                      (isExpense
+                                                          ? 'Expense'
+                                                          : 'Income'),
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  DateFormat('MMM dd, yyyy')
+                                                      .format(date),
+                                                  style: TextStyle(
+                                                    color:
+                                                        const Color(0xFF94A3B8),
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Text(
+                                            '${isExpense ? '-' : '+'} Rs. ${amount.toStringAsFixed(0)}',
+                                            style: TextStyle(
+                                              color: isExpense
+                                                  ? const Color(0xFFEF4444)
+                                                  : const Color(0xFF10B981),
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        // Show login prompt for non-logged in users
+                        const SizedBox(height: 40),
+                        Center(
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.account_circle,
+                                size: 80,
+                                color: const Color(0xFF94A3B8),
+                              ),
+                              const SizedBox(height: 20),
+                              const Text(
+                                'Please login to access',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'financial features',
+                                style: TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 30),
+                              CustomButton(
+                                text: 'Login / Register',
+                                onPressed: () {
+                                  Navigator.pushNamed(context, '/login');
+                                },
+                                width: 200,
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -1142,8 +1685,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         const SizedBox(height: 4),
         Text(
           title,
-          style: TextStyle(
-            color: const Color(0xFF94A3B8),
+          style: const TextStyle(
+            color: Color(0xFF94A3B8),
             fontSize: 11,
           ),
           textAlign: TextAlign.center,
@@ -1164,24 +1707,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildQuickAction(IconData icon, String title, {VoidCallback? onTap}) {
     return GlassCard(
-      height: 90,
       borderRadius: 16,
       blur: 15,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: const Color(0xFFFBA002),
-              size: 28,
-            ),
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
+        child: Container(
+          height: 90,
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: const Color(0xFFFBA002),
+                size: 28,
+              ),
+              const SizedBox(height: 6),
+              Text(
                 title,
                 style: const TextStyle(
                   color: Colors.white,
@@ -1191,8 +1734,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

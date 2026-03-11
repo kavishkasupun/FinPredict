@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+    
   
   
   # Firebase
@@ -26,10 +27,11 @@ dependencies:
   
   # UI & Design
   lottie: ^2.7.0
-  syncfusion_flutter_gauges: ^24.2.9
+  syncfusion_flutter_gauges: ^30.2.6
   fl_chart: ^0.66.2
   animated_text_kit: ^4.2.2
   glassmorphism: ^3.0.0
+  syncfusion_flutter_charts: ^30.2.6+1
   
   # Utilities
   provider: ^6.1.1
@@ -50,6 +52,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.2
+
 
 flutter:
   uses-material-design: true

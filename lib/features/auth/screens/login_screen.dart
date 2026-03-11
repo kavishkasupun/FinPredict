@@ -7,7 +7,7 @@ import 'package:finpredict/widgets/custom_dialog.dart';
 import 'package:finpredict/services/firebase_service.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // ADD THIS IMPORT
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:finpredict/features/dashboard/screens/home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -66,29 +66,35 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (!userExists) {
           print('Creating new Google user in Firestore...');
+
+          // Detect user type for Google user (default to employee)
+          final userType = 'employee'; // Default for Google users
+
           final userData = {
             'uid': user.uid,
             'name': user.displayName ?? 'Google User',
             'email': user.email,
             'photoUrl': user.photoURL,
-            'userType': 'Google User',
+            'userType': userType, // Store user type
+            'employmentType': userType, // Also store as employmentType for ML
             'emailVerified': true, // Google users are auto-verified
             'accountStatus': 'active',
             'createdAt': DateTime.now().toIso8601String(),
             'monthlyBudget': 60000.0,
             'totalSavings': 0.0,
             'isGoogleUser': true,
-            'lastLogin': DateTime.now().toIso8601String(), // Add last login
+            'lastLogin': DateTime.now().toIso8601String(),
           };
 
           await _firebaseService.saveUserData(user.uid, userData);
-          print('Google user created in Firestore successfully');
+          print(
+              'Google user created in Firestore successfully with type: $userType');
         } else {
           print('Google user already exists in Firestore');
           // Update last login
           await _firebaseService.saveUserData(user.uid, {
             'updatedAt': FieldValue.serverTimestamp(),
-            'lastLogin': FieldValue.serverTimestamp(), // Update last login
+            'lastLogin': FieldValue.serverTimestamp(),
           });
         }
 
@@ -189,23 +195,31 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (!userExists) {
           print('Creating new email user in Firestore...');
-          // If user doesn't exist in Firestore, create them
+
+          // Default user type for email users
+          final userType = 'employee'; // Default
+
+          // If you have employment type from signup, you'd get it from somewhere
+          // For now, we'll use default
+
           final userData = {
             'uid': user.uid,
             'name': user.email?.split('@').first ?? 'New User',
             'email': user.email,
-            'userType': 'Regular User',
+            'userType': userType, // Store user type
+            'employmentType': userType, // Also store as employmentType for ML
             'emailVerified': true,
             'accountStatus': 'active',
             'createdAt': DateTime.now().toIso8601String(),
             'monthlyBudget': 60000.0,
             'totalSavings': 0.0,
             'isGoogleUser': false,
-            'lastLogin': DateTime.now().toIso8601String(), // Add last login
+            'lastLogin': DateTime.now().toIso8601String(),
           };
 
           await _firebaseService.saveUserData(user.uid, userData);
-          print('Email user created in Firestore successfully');
+          print(
+              'Email user created in Firestore successfully with type: $userType');
         } else {
           print('Email user already exists in Firestore');
           // Update email verification status and last login
@@ -213,7 +227,7 @@ class _LoginScreenState extends State<LoginScreen> {
             'emailVerified': true,
             'accountStatus': 'active',
             'updatedAt': FieldValue.serverTimestamp(),
-            'lastLogin': FieldValue.serverTimestamp(), // Update last login
+            'lastLogin': FieldValue.serverTimestamp(),
           });
         }
 

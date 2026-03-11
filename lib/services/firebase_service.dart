@@ -22,7 +22,7 @@ class FirebaseService {
     _storage = FirebaseStorage.instance;
   }
 
-  // Save user data to Firestore
+  // Save user data to Firestore with user type
   Future<void> saveUserData(
       String userId, Map<String, dynamic> userData) async {
     try {
@@ -43,6 +43,24 @@ class FirebaseService {
       print('❌ Error saving user data: $e');
       rethrow;
     }
+  }
+
+  // Detect user type based on registration data
+  String detectUserTypeFromSignUp(Map<String, dynamic> userData) {
+    if (userData.containsKey('employmentType')) {
+      final empType = userData['employmentType'].toString().toLowerCase();
+      if (empType.contains('student')) return 'student';
+      if (empType.contains('employee')) return 'employee';
+      if (empType.contains('business') || empType.contains('self'))
+        return 'self-employed';
+      if (empType.contains('unemployed') || empType.contains('other'))
+        return 'non-employee';
+    }
+
+    // Default based on age if provided
+    final age = userData['age'] ?? 25;
+    if (age < 23) return 'student';
+    return 'employee'; // Default
   }
 
   // Check if email is verified
@@ -281,5 +299,95 @@ class FirebaseService {
       ...updates,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  // Check if user has any transactions
+  Future<bool> hasAnyTransactions(String userId) async {
+    try {
+      // Check expenses
+      final expensesSnapshot = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('expenses')
+          .limit(1)
+          .get();
+
+      if (expensesSnapshot.docs.isNotEmpty) return true;
+
+      // Check income
+      final incomeSnapshot = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('income')
+          .limit(1)
+          .get();
+
+      return incomeSnapshot.docs.isNotEmpty;
+    } catch (e) {
+      print('Error checking transactions: $e');
+      return false;
+    }
+  }
+
+  // NEW: Get all unique borrowers
+  Future<List<String>> getAllBorrowers(String userId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('loans')
+          .get();
+
+      final borrowers = snapshot.docs
+          .map((doc) => doc.data()['borrower'] as String)
+          .toSet()
+          .toList();
+
+      return borrowers;
+    } catch (e) {
+      print('Error getting borrowers: $e');
+      return [];
+    }
+  }
+
+  // NEW: Get loan summary by borrower
+  Future<Map<String, dynamic>> getLoanSummaryByBorrower(String userId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('loans')
+          .get();
+
+      Map<String, dynamic> summary = {};
+
+      for (var doc in snapshot.docs) {
+        final loan = doc.data();
+        final borrower = loan['borrower'] as String;
+        final amount = (loan['amount'] as num).toDouble();
+        final remaining = (loan['remaining'] as num).toDouble();
+
+        if (!summary.containsKey(borrower)) {
+          summary[borrower] = {
+            'totalLoaned': 0.0,
+            'totalRemaining': 0.0,
+            'loanCount': 0,
+            'activeLoans': 0,
+          };
+        }
+
+        summary[borrower]['totalLoaned'] += amount;
+        summary[borrower]['totalRemaining'] += remaining;
+        summary[borrower]['loanCount'] += 1;
+        if (remaining > 0) {
+          summary[borrower]['activeLoans'] += 1;
+        }
+      }
+
+      return summary;
+    } catch (e) {
+      print('Error getting loan summary: $e');
+      return {};
+    }
   }
 }
