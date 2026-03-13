@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
+import 'package:lottie/lottie.dart';
 import 'package:finpredict/widgets/glass_card.dart';
 import 'package:finpredict/widgets/custom_button.dart';
 import 'package:finpredict/services/ml_service.dart';
@@ -304,8 +305,16 @@ class _PredictionSummaryScreenState extends State<PredictionSummaryScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const CircularProgressIndicator(
-                    color: Color(0xFFFBA002),
+                  // ============================================
+                  // UPDATED: Finpredict.json animation for loading
+                  // ============================================
+                  Container(
+                    width: 200,
+                    height: 200,
+                    child: Lottie.asset(
+                      'assets/animations/Finpredict.json',
+                      fit: BoxFit.contain,
+                    ),
                   ),
                   const SizedBox(height: 20),
                   Text(

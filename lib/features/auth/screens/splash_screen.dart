@@ -108,7 +108,7 @@ class _SplashScreenState extends State<SplashScreen> {
               color: const Color(0xFF0F172A),
               child: _animationLoaded && !_animationError
                   ? Lottie.asset(
-                      'assets/animations/finance1.json',
+                      'assets/animations/Finpredict.json',
                       fit: BoxFit.cover,
                       repeat: true,
                       animate: true,
@@ -164,7 +164,7 @@ class _SplashScreenState extends State<SplashScreen> {
                     child: Center(
                       child: _animationLoaded && !_animationError
                           ? Lottie.asset(
-                              'assets/animations/finance1.json',
+                              'assets/animations/Finpredict.json',
                               width: 140,
                               height: 140,
                               fit: BoxFit.contain,

@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
     
+    
   
   
   # Firebase
@@ -52,11 +53,17 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.2
+  flutter_launcher_icons: "^0.14.4"
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/Icon/Finpredict.png"
 
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/
-    - assets/animations/finance1.json
+    - assets/animations/Finpredict.json
     - assets/ml/   

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:lottie/lottie.dart';
 
 import 'package:finpredict/widgets/glass_card.dart';
 import 'package:finpredict/widgets/custom_dialog.dart';
@@ -587,6 +588,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // ============================================
+    // UPDATED: Loading state with Finpredict.json animation
+    // ============================================
     if (_isLoading) {
       return Scaffold(
         backgroundColor: const Color(0xFF0F172A),
@@ -594,14 +598,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(
-                color: Color(0xFFFBA002),
+              // Finpredict.json animation
+              Container(
+                width: 200,
+                height: 200,
+                child: Lottie.asset(
+                  'assets/animations/Finpredict.json',
+                  fit: BoxFit.contain,
+                ),
               ),
               const SizedBox(height: 20),
-              Text(
+              const Text(
                 'Loading AI Model & Your Data...',
                 style: TextStyle(
-                  color: const Color(0xFF94A3B8),
+                  color: Color(0xFF94A3B8),
                   fontSize: 16,
                 ),
               ),

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:lottie/lottie.dart';
 import 'package:finpredict/widgets/glass_card.dart';
 import 'package:finpredict/widgets/custom_text_field.dart';
 import 'package:finpredict/services/firebase_service.dart';
@@ -296,8 +297,31 @@ What specific finance topic would you like help with? Or ask me how to use any a
                   .snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Color(0xFFFBA002)),
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // ============================================
+                        // UPDATED: Finpredict.json animation for loading
+                        // ============================================
+                        Container(
+                          width: 150,
+                          height: 150,
+                          child: Lottie.asset(
+                            'assets/animations/Finpredict.json',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Loading chat history...',
+                          style: TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
                   );
                 }
 
@@ -371,27 +395,31 @@ What specific finance topic would you like help with? Or ask me how to use any a
             ),
           ),
 
-          // Loading indicator
+          // ============================================
+          // UPDATED: Loading indicator with Finpredict.json
+          // ============================================
           if (_isLoading)
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFFFBA002),
+                  // Small Finpredict animation for thinking state
+                  Container(
+                    width: 30,
+                    height: 30,
+                    child: Lottie.asset(
+                      'assets/animations/Finpredict.json',
+                      fit: BoxFit.contain,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
                     'AI is thinking...',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
-                      fontSize: 12,
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
