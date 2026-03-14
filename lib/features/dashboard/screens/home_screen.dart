@@ -109,14 +109,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         final userData = await _firebaseService.getUserData(_currentUser!.uid);
 
         if (userData != null) {
+          // Ensure all numeric values are double
+          final processedData = Map<String, dynamic>.from(userData);
+          processedData.forEach((key, value) {
+            if (value is int) {
+              processedData[key] = value.toDouble();
+            }
+          });
+
           setState(() {
-            _userData = userData;
-            _budgetLimit =
-                (userData['monthlyBudget'] as num?)?.toDouble() ?? 60000.0;
-            _userType = userData['userType'] ??
-                userData['employmentType'] ??
-                _detectUserTypeFromData(userData) ??
-                'General User';
+            _userData = processedData;
+
+            // Safely get budget with proper type conversion
+            final budgetValue = processedData['monthlyBudget'];
+            if (budgetValue != null) {
+              if (budgetValue is int) {
+                _budgetLimit = budgetValue.toDouble();
+              } else if (budgetValue is double) {
+                _budgetLimit = budgetValue;
+              } else {
+                _budgetLimit = 60000.0;
+              }
+            } else {
+              _budgetLimit = 60000.0;
+            }
+
+            // Get user type with proper fallback
+            _userType = _getUserTypeFromData(processedData);
           });
 
           await _loadCurrentMonthData();
@@ -140,17 +159,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 'detailedMessage': 'Start by adding your first transaction',
                 'shortMessage': 'Welcome! Start tracking your finances',
                 'expense_percentage': 0,
-                'predicted_monthly_expense': 0,
+                'predicted_monthly_expense': 0.0,
               };
               _forecast = {
                 'hasData': false,
                 'message': 'Add transactions to see predictions',
-                'monthlyProjection': 0,
+                'monthlyProjection': 0.0,
               };
             });
           }
         } else {
-          _setDefaultUserData();
+          // User exists in Auth but not in Firestore - create basic profile
+          await _createBasicUserProfile();
         }
       } else {
         // User not logged in - still initialize for notifications
@@ -159,11 +179,70 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } catch (e) {
       print('Error loading user data: $e');
       _setDefaultUserData();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _createBasicUserProfile() async {
+    try {
+      final user = _currentUser!;
+      final basicUserData = {
+        'name': user.displayName ?? user.email?.split('@').first ?? 'User',
+        'email': user.email,
+        'userType': 'General User',
+        'employmentType': 'employee',
+        'monthlyBudget': 60000.0,
+        'age': 25.0,
+        'dependents': 0.0,
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+      await _firebaseService.saveUserData(user.uid, basicUserData);
+
+      setState(() {
+        _userData = basicUserData;
+        _userType = 'General User';
+        _budgetLimit = 60000.0;
+      });
+
+      await _loadCurrentMonthData();
+      await _loadRecentTransactions();
+    } catch (e) {
+      print('Error creating basic profile: $e');
+      _setDefaultUserData();
+    }
+  }
+
+  String _getUserTypeFromData(Map<String, dynamic> data) {
+    // Check for explicit userType
+    if (data.containsKey('userType') && data['userType'] != null) {
+      return data['userType'].toString();
     }
 
-    setState(() {
-      _isLoading = false;
-    });
+    // Check employment type
+    if (data.containsKey('employmentType') && data['employmentType'] != null) {
+      final empType = data['employmentType'].toString().toLowerCase();
+      if (empType.contains('student')) return 'Student';
+      if (empType.contains('employee')) return 'Employee';
+      if (empType.contains('business') || empType.contains('self'))
+        return 'Self-Employed';
+      if (empType.contains('unemployed') || empType.contains('other'))
+        return 'Non-Employee';
+    }
+
+    // Detect from age
+    final age = data['age'];
+    if (age != null) {
+      final ageNum = age is int ? age : (age as num?)?.toInt() ?? 25;
+      if (ageNum < 23) return 'Student';
+    }
+
+    return 'General User';
   }
 
   Future<void> _initializeWithoutUser() async {
@@ -172,7 +251,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _userData = {
         'name': 'Guest User',
         'userType': 'Guest',
-        'monthlyBudget': 0,
+        'monthlyBudget': 0.0,
       };
       _userType = 'Guest';
       _hasTransactions = false;
@@ -185,15 +264,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         'shortMessage': 'Login to continue',
       };
     });
-  }
-
-  String _detectUserTypeFromData(Map<String, dynamic> data) {
-    final age = data['age'] ?? 25;
-    final income = data['monthlyIncome'] ?? 0;
-
-    if (age < 23 && income < 20000) return 'Student';
-    if (income > 50000) return 'Employee';
-    return 'General User';
   }
 
   Future<void> _loadCurrentMonthData() async {
@@ -225,19 +295,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
         double totalExpenses = 0.0;
         for (var expense in expensesSnapshot.docs) {
-          totalExpenses += (expense.data()['amount'] as num).toDouble();
+          final amount = expense.data()['amount'];
+          if (amount is int) {
+            totalExpenses += amount.toDouble();
+          } else if (amount is double) {
+            totalExpenses += amount;
+          }
         }
 
         double totalIncome = 0.0;
         for (var income in incomeSnapshot.docs) {
-          totalIncome += (income.data()['amount'] as num).toDouble();
+          final amount = income.data()['amount'];
+          if (amount is int) {
+            totalIncome += amount.toDouble();
+          } else if (amount is double) {
+            totalIncome += amount;
+          }
         }
 
-        setState(() {
-          _currentExpense = totalExpenses;
-          _currentIncome = totalIncome;
-          _savings = _currentIncome - _currentExpense;
-        });
+        if (mounted) {
+          setState(() {
+            _currentExpense = totalExpenses;
+            _currentIncome = totalIncome;
+            _savings = _currentIncome - _currentExpense;
+          });
+        }
       }
     } catch (e) {
       print('Error loading month data: $e');
@@ -259,6 +341,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           final data = doc.data();
           data['id'] = doc.id;
           data['type'] = 'expense';
+
+          // Ensure amount is double
+          if (data.containsKey('amount')) {
+            final amount = data['amount'];
+            if (amount is int) {
+              data['amount'] = amount.toDouble();
+            }
+          }
+
           return data;
         }).toList();
 
@@ -274,27 +365,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           final data = doc.data();
           data['id'] = doc.id;
           data['type'] = 'income';
+
+          // Ensure amount is double
+          if (data.containsKey('amount')) {
+            final amount = data['amount'];
+            if (amount is int) {
+              data['amount'] = amount.toDouble();
+            }
+          }
+
           return data;
         }).toList();
+
+        if (mounted) {
+          setState(() {});
+        }
       }
     } catch (e) {
       print('Error loading recent transactions: $e');
     }
   }
 
-  // ============================================
-  // FIXED: AI Prediction with monthly prediction amount and notifications
-  // ============================================
   Future<void> _runAIPrediction() async {
     try {
       final previousExpenses = await _getPreviousExpenses(6);
 
+      // Ensure all values are double
       final userFeatures = {
-        'age': _userData?['age'] ?? 30,
-        'dependents': _userData?['dependents'] ?? 0,
+        'age': _safeToDouble(_userData?['age'] ?? 30.0),
+        'dependents': _safeToDouble(_userData?['dependents'] ?? 0.0),
         'savings': _savings,
         'budget': _budgetLimit,
-        'employmentType': _userData?['employmentType'] ?? _userType,
+        'employmentType': _userData?['employmentType']?.toString() ?? _userType,
         'userType': _userType,
         'monthlyIncome': _currentIncome,
       };
@@ -319,26 +421,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // Calculate predicted monthly expense
       double predictedMonthlyExpense = _currentExpense;
       if (forecast.containsKey('monthlyProjection')) {
-        predictedMonthlyExpense = forecast['monthlyProjection'];
+        final projection = forecast['monthlyProjection'];
+        if (projection is int) {
+          predictedMonthlyExpense = projection.toDouble();
+        } else if (projection is double) {
+          predictedMonthlyExpense = projection;
+        }
       }
 
-      setState(() {
-        _aiPrediction = {
-          ...prediction,
-          'expense_percentage':
-              prediction['expense_percentage'] ?? calculatedExpensePercentage,
-          'predicted_monthly_expense': predictedMonthlyExpense,
-        };
-        _forecast = forecast;
+      if (mounted) {
+        setState(() {
+          _aiPrediction = {
+            ...prediction,
+            'expense_percentage':
+                prediction['expense_percentage'] ?? calculatedExpensePercentage,
+            'predicted_monthly_expense': predictedMonthlyExpense,
+          };
+          _forecast = forecast;
 
-        if (prediction.containsKey('userTypeDisplay')) {
-          _userType = prediction['userTypeDisplay'];
-        }
-      });
+          if (prediction.containsKey('userTypeDisplay')) {
+            _userType = prediction['userTypeDisplay'].toString();
+          }
+        });
+      }
 
-      // ============================================
-      // FIXED: Show notification for high/critical levels
-      // ============================================
       await _checkAndShowNotification(prediction);
     } catch (e) {
       print('Error in AI prediction: $e');
@@ -350,21 +456,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final warningLevel = _getWarningLevelFromPercentage(fallbackPercentage);
       final messages = _getFallbackMessages(fallbackPercentage);
 
-      setState(() {
-        _aiPrediction = {
-          'hasData': _hasTransactions,
-          'alert': warningLevel == 'critical' || warningLevel == 'high',
-          'warningLevel': warningLevel,
-          'userType': _userType,
-          'userTypeDisplay': _userType,
-          'message': messages['message'],
-          'detailedMessage': messages['detailedMessage'],
-          'shortMessage': messages['shortMessage'],
-          'expense_percentage': fallbackPercentage,
-          'predicted_monthly_expense':
-              _currentExpense * 1.1, // Simple fallback prediction
-        };
-      });
+      if (mounted) {
+        setState(() {
+          _aiPrediction = {
+            'hasData': _hasTransactions,
+            'alert': warningLevel == 'critical' || warningLevel == 'high',
+            'warningLevel': warningLevel,
+            'userType': _userType,
+            'userTypeDisplay': _userType,
+            'message': messages['message'],
+            'detailedMessage': messages['detailedMessage'],
+            'shortMessage': messages['shortMessage'],
+            'expense_percentage': fallbackPercentage,
+            'predicted_monthly_expense':
+                _currentExpense * 1.1, // Simple fallback prediction
+          };
+        });
+      }
 
       // Show notification for fallback as well
       await _checkAndShowNotification({
@@ -374,15 +482,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  // ============================================
-  // NEW: Check and show notification with rate limiting
-  // ============================================
+  // Helper method to safely convert to double
+  double _safeToDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is num) return value.toDouble();
+    return 0.0;
+  }
+
   Future<void> _checkAndShowNotification(
       Map<String, dynamic> prediction) async {
     if (!_notificationsEnabled || _currentUser == null) return;
 
-    final warningLevel = prediction['warningLevel'] ?? 'good';
-    final expensePercentage = prediction['expense_percentage'] ?? 0;
+    final warningLevel = prediction['warningLevel']?.toString() ?? 'good';
+    final expensePercentage = prediction['expense_percentage'];
+    final percentageDouble = expensePercentage is int
+        ? expensePercentage.toDouble()
+        : (expensePercentage as num?)?.toDouble() ?? 0.0;
 
     // Only show for high and critical
     if (warningLevel != 'critical' && warningLevel != 'high') {
@@ -407,15 +524,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _notificationService.showExpenseAlert(
       currentExpense: _currentExpense,
       monthlyIncome: _currentIncome,
-      percentage: expensePercentage.toDouble(),
-      aiMessage: prediction['message'] ?? '',
+      percentage: percentageDouble,
+      aiMessage: prediction['message']?.toString() ?? '',
       warningLevel: warningLevel,
     );
   }
 
-  // ============================================
-  // FIXED: Helper method to determine warning level from percentage
-  // ============================================
   String _getWarningLevelFromPercentage(int percentage) {
     if (percentage >= 90) return 'critical';
     if (percentage >= 80) return 'high';
@@ -423,9 +537,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return 'good';
   }
 
-  // ============================================
-  // FIXED: Helper method to get fallback messages based on percentage
-  // ============================================
   Map<String, String> _getFallbackMessages(int percentage) {
     if (percentage >= 90) {
       return {
@@ -478,7 +589,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
         double total = 0.0;
         for (var doc in snapshot.docs) {
-          total += (doc.data()['amount'] as num).toDouble();
+          final amount = doc.data()['amount'];
+          if (amount is int) {
+            total += amount.toDouble();
+          } else if (amount is double) {
+            total += amount;
+          }
         }
         expenses.add(total);
       }
@@ -588,9 +704,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    // ============================================
-    // UPDATED: Loading state with Finpredict.json animation
-    // ============================================
     if (_isLoading) {
       return Scaffold(
         backgroundColor: const Color(0xFF0F172A),
@@ -598,7 +711,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Finpredict.json animation
               Container(
                 width: 200,
                 height: 200,
@@ -621,32 +733,39 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
     }
 
-    // Calculate expense percentage correctly for display
-    final double expensePercentage =
-        _currentIncome > 0 ? (_currentExpense / _currentIncome) * 100 : 0.0;
+    // Calculate expense percentage correctly for display with safe conversion
+    final double expensePercentage = _safeToDouble(
+        _currentIncome > 0 ? (_currentExpense / _currentIncome) * 100 : 0.0);
 
-    final double savingsRate =
-        (_currentIncome > 0) ? (_savings / _currentIncome) * 100 : 0.0;
+    final double savingsRate = _safeToDouble(
+        (_currentIncome > 0) ? (_savings / _currentIncome) * 100 : 0.0);
 
-    final userName = _userData?['name'] ??
+    final userName = _userData?['name']?.toString() ??
         _currentUser?.displayName ??
         _currentUser?.email?.split('@').first ??
         'Guest';
 
-    // Get expense percentage from aiPrediction or use calculated value
-    final int displayExpensePercentage =
-        (_aiPrediction?['expense_percentage'] ?? expensePercentage).round();
+    // Get expense percentage from aiPrediction or use calculated value with safe conversion
+    final dynamic aiExpensePercentage =
+        _aiPrediction?['expense_percentage'] ?? expensePercentage;
+    final int displayExpensePercentage;
+    if (aiExpensePercentage is int) {
+      displayExpensePercentage = aiExpensePercentage;
+    } else if (aiExpensePercentage is double) {
+      displayExpensePercentage = aiExpensePercentage.round();
+    } else {
+      displayExpensePercentage = expensePercentage.round();
+    }
 
-    // Get predicted monthly expense
-    final double predictedMonthlyExpense =
+    // Get predicted monthly expense with safe conversion
+    final dynamic predictedValue =
         _aiPrediction?['predicted_monthly_expense'] ?? _currentExpense;
+    final double predictedMonthlyExpense = _safeToDouble(predictedValue);
 
     final bool hasData = _aiPrediction?['hasData'] ?? false;
-    final String warningLevel = _aiPrediction?['warningLevel'] ?? 'good';
+    final String warningLevel =
+        _aiPrediction?['warningLevel']?.toString() ?? 'good';
 
-    // ============================================
-    // FIXED: Get colors and icons based on warning level
-    // ============================================
     Color getAlertColor() {
       switch (warningLevel) {
         case 'critical':
@@ -677,16 +796,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     }
 
-    // ============================================
-    // FIXED: Get the correct message from aiPrediction based on warning level
-    // ============================================
     String getDisplayMessage() {
       if (!hasData) {
-        return _aiPrediction?['message'] ??
+        return _aiPrediction?['message']?.toString() ??
             '👋 Welcome! Add your first transaction';
       }
 
-      // Check warning level and return appropriate message
       switch (warningLevel) {
         case 'critical':
           return '⚠️ CRITICAL: You\'ve spent $displayExpensePercentage% of your income!';
@@ -697,7 +812,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         case 'good':
           return '✅ GOOD JOB! You\'ve spent only $displayExpensePercentage% of your income';
         default:
-          return _aiPrediction?['message'] ?? '✅ Your finances look good!';
+          return _aiPrediction?['message']?.toString() ??
+              '✅ Your finances look good!';
       }
     }
 
@@ -716,7 +832,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         case 'good':
           return 'You\'re saving ${100 - displayExpensePercentage}% of your income. Great financial discipline!';
         default:
-          return _aiPrediction?['detailedMessage'] ??
+          return _aiPrediction?['detailedMessage']?.toString() ??
               'Keep tracking your expenses';
       }
     }
@@ -888,9 +1004,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
                       const SizedBox(height: 20),
 
-                      // ============================================
-                      // FIXED: AI Status Card with monthly prediction
-                      // ============================================
+                      // AI Status Card with monthly prediction
                       if (_aiPrediction != null) ...[
                         GlassCard(
                           width: double.infinity,
@@ -967,9 +1081,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                             ],
                                           ),
                                           const SizedBox(height: 8),
-                                          // ============================================
-                                          // FIXED: Use dynamic message based on warning level
-                                          // ============================================
                                           Text(
                                             getDisplayMessage(),
                                             style: TextStyle(
@@ -1041,9 +1152,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                   ),
                                 ),
 
-                                // ============================================
-                                // NEW: Monthly Prediction Card
-                                // ============================================
+                                // Monthly Prediction Card
                                 if (hasData) ...[
                                   const SizedBox(height: 16),
                                   Container(
@@ -1540,8 +1649,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                     final date =
                                         DateTime.parse(transaction['date']);
                                     final amount =
-                                        (transaction['amount'] as num)
-                                            .toDouble();
+                                        _safeToDouble(transaction['amount']);
 
                                     return Padding(
                                       padding:

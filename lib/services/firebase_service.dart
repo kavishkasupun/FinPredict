@@ -26,9 +26,24 @@ class FirebaseService {
   Future<void> saveUserData(
       String userId, Map<String, dynamic> userData) async {
     try {
-      // Remove any existing 'lastLogin' from userData to avoid conflicts
+      // Ensure all numeric values are stored as double to prevent type mismatches
       final dataToSave = Map<String, dynamic>.from(userData);
-      dataToSave.remove('lastLogin'); // Remove if exists
+
+      // Convert any int values to double for consistency
+      dataToSave.forEach((key, value) {
+        if (value is int) {
+          dataToSave[key] = value.toDouble();
+        }
+      });
+
+      // Remove any existing 'lastLogin' from userData to avoid conflicts
+      dataToSave.remove('lastLogin');
+
+      // Ensure userType is set
+      if (!dataToSave.containsKey('userType') ||
+          dataToSave['userType'] == null) {
+        dataToSave['userType'] = detectUserTypeFromSignUp(dataToSave);
+      }
 
       await _firestore.collection('users').doc(userId).set(
         {
@@ -47,20 +62,36 @@ class FirebaseService {
 
   // Detect user type based on registration data
   String detectUserTypeFromSignUp(Map<String, dynamic> userData) {
+    // Check for explicit userType
+    if (userData.containsKey('userType') && userData['userType'] != null) {
+      final userType = userData['userType'].toString().toLowerCase();
+      if (userType.contains('student')) return 'Student';
+      if (userType.contains('employee')) return 'Employee';
+      if (userType.contains('business') || userType.contains('self'))
+        return 'Self-Employed';
+      if (userType.contains('unemployed') || userType.contains('other'))
+        return 'Non-Employee';
+    }
+
+    // Check employment type
     if (userData.containsKey('employmentType')) {
       final empType = userData['employmentType'].toString().toLowerCase();
-      if (empType.contains('student')) return 'student';
-      if (empType.contains('employee')) return 'employee';
+      if (empType.contains('student')) return 'Student';
+      if (empType.contains('employee')) return 'Employee';
       if (empType.contains('business') || empType.contains('self'))
-        return 'self-employed';
+        return 'Self-Employed';
       if (empType.contains('unemployed') || empType.contains('other'))
-        return 'non-employee';
+        return 'Non-Employee';
     }
 
     // Default based on age if provided
-    final age = userData['age'] ?? 25;
-    if (age < 23) return 'student';
-    return 'employee'; // Default
+    final age = userData['age'];
+    if (age != null) {
+      final ageNum = age is int ? age : (age as num?)?.toInt() ?? 25;
+      if (ageNum < 23) return 'Student';
+    }
+
+    return 'General User'; // Default
   }
 
   // Check if email is verified
@@ -113,7 +144,19 @@ class FirebaseService {
   Future<Map<String, dynamic>?> getUserData(String userId) async {
     try {
       final doc = await _firestore.collection('users').doc(userId).get();
-      return doc.data();
+      final data = doc.data();
+
+      if (data != null) {
+        // Convert all numeric values to double to prevent type mismatches
+        final processedData = Map<String, dynamic>.from(data);
+        processedData.forEach((key, value) {
+          if (value is int) {
+            processedData[key] = value.toDouble();
+          }
+        });
+        return processedData;
+      }
+      return null;
     } catch (e) {
       print('Error getting user data: $e');
       return null;
@@ -121,6 +164,13 @@ class FirebaseService {
   }
 
   Future<void> addExpense(String userId, Map<String, dynamic> expense) async {
+    // Ensure amount is double
+    if (expense.containsKey('amount')) {
+      if (expense['amount'] is int) {
+        expense['amount'] = (expense['amount'] as int).toDouble();
+      }
+    }
+
     await _firestore
         .collection('users')
         .doc(userId)
@@ -141,6 +191,13 @@ class FirebaseService {
   }
 
   Future<void> addIncome(String userId, Map<String, dynamic> income) async {
+    // Ensure amount is double
+    if (income.containsKey('amount')) {
+      if (income['amount'] is int) {
+        income['amount'] = (income['amount'] as int).toDouble();
+      }
+    }
+
     await _firestore.collection('users').doc(userId).collection('income').add({
       ...income,
       'createdAt': FieldValue.serverTimestamp(),
@@ -189,8 +246,16 @@ class FirebaseService {
   Future<void> updateUserProfile(
       String userId, Map<String, dynamic> profileData) async {
     try {
+      // Convert any int values to double
+      final processedData = Map<String, dynamic>.from(profileData);
+      processedData.forEach((key, value) {
+        if (value is int) {
+          processedData[key] = value.toDouble();
+        }
+      });
+
       await _firestore.collection('users').doc(userId).update({
-        ...profileData,
+        ...processedData,
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
@@ -222,7 +287,10 @@ class FirebaseService {
       final doc = await _firestore.collection('users').doc(userId).get();
       final data = doc.data();
       if (data != null && data.containsKey('monthlyBudget')) {
-        return (data['monthlyBudget'] as num).toDouble();
+        final value = data['monthlyBudget'];
+        if (value is int) return value.toDouble();
+        if (value is double) return value;
+        return 0.0;
       }
       return 0.0;
     } catch (e) {
@@ -262,7 +330,10 @@ class FirebaseService {
       for (final doc in querySnapshot.docs) {
         final data = doc.data();
         if (data.containsKey('amount')) {
-          total += (data['amount'] as num).toDouble();
+          final amount = data['amount'];
+          if (amount is int)
+            total += amount.toDouble();
+          else if (amount is double) total += amount;
         }
       }
       return total;
@@ -273,6 +344,18 @@ class FirebaseService {
   }
 
   Future<void> addLoan(String userId, Map<String, dynamic> loanData) async {
+    // Ensure amount is double
+    if (loanData.containsKey('amount')) {
+      if (loanData['amount'] is int) {
+        loanData['amount'] = (loanData['amount'] as int).toDouble();
+      }
+    }
+    if (loanData.containsKey('remaining')) {
+      if (loanData['remaining'] is int) {
+        loanData['remaining'] = (loanData['remaining'] as int).toDouble();
+      }
+    }
+
     await _firestore.collection('users').doc(userId).collection('loans').add({
       ...loanData,
       'createdAt': FieldValue.serverTimestamp(),
@@ -290,13 +373,21 @@ class FirebaseService {
 
   Future<void> updateLoan(
       String userId, String loanId, Map<String, dynamic> updates) async {
+    // Ensure numeric values are double
+    final processedUpdates = Map<String, dynamic>.from(updates);
+    processedUpdates.forEach((key, value) {
+      if (value is int) {
+        processedUpdates[key] = value.toDouble();
+      }
+    });
+
     await _firestore
         .collection('users')
         .doc(userId)
         .collection('loans')
         .doc(loanId)
         .update({
-      ...updates,
+      ...processedUpdates,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -364,8 +455,16 @@ class FirebaseService {
       for (var doc in snapshot.docs) {
         final loan = doc.data();
         final borrower = loan['borrower'] as String;
-        final amount = (loan['amount'] as num).toDouble();
-        final remaining = (loan['remaining'] as num).toDouble();
+
+        final amount = loan['amount'];
+        final amountDouble = amount is int
+            ? amount.toDouble()
+            : (amount as num?)?.toDouble() ?? 0.0;
+
+        final remaining = loan['remaining'];
+        final remainingDouble = remaining is int
+            ? remaining.toDouble()
+            : (remaining as num?)?.toDouble() ?? 0.0;
 
         if (!summary.containsKey(borrower)) {
           summary[borrower] = {
@@ -376,10 +475,10 @@ class FirebaseService {
           };
         }
 
-        summary[borrower]['totalLoaned'] += amount;
-        summary[borrower]['totalRemaining'] += remaining;
+        summary[borrower]['totalLoaned'] += amountDouble;
+        summary[borrower]['totalRemaining'] += remainingDouble;
         summary[borrower]['loanCount'] += 1;
-        if (remaining > 0) {
+        if (remainingDouble > 0) {
           summary[borrower]['activeLoans'] += 1;
         }
       }
